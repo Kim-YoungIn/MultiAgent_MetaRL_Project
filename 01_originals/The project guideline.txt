@@ -1,0 +1,48 @@
+The project proposal submission is due by Nov. 1st (11:59:00pm). It should be just one page. Use the attached template. Do not change the font style and size. Figures can be attached to the second page.
+
+
+
+Types of Project
+Topic. You may choose any topic related to RL for this project. While I provide some general directions that you may want to pursue, you do not need to invent a new algorithm, achieve state-of-the-art performance, or completely solve a new application domain to be successful. Instead, the goal of this project is to give you a taste of what research in RL might entail. If you are passionate about the topic by the end of the course, you have the option to continue working on the project with your team. However, you should dedicate a significant amount of time to this project and follow rigorous scientific methodology in your research pursuits.
+
+
+
+Research Papers. If you do not have any ideas, you can consult the proceedings of top AI/ML venues such as NeurIPS, ICML, ICLR, AAAI, where RL papers are often published, to find interesting papers. One approach is to read one paper carefully, and then read some of the papers cited within that paper. This will often lead you to other relevant papers. Additionally, it is helpful to see what more recent papers have cited your originally selected paper to identify advances made since its publication.
+
+
+
+Novelty. An important aspect of the final project is the process of choosing an interesting and creative project topic. Therefore, we intentionally do not provide a specific project topic, but you may get some inspiration also from the following example projects as well as research papers
+
+https://iq.opengenus.org/reinforcement-learning-project-ideas/
+https://www.projectpro.io/article/reinforcement-learning-projects-ideas-for-beginners-with-code/521
+https://www.gocoder.one/blog/reinforcement-learning-project-ideas/
+
+
+Computation. Additionally, it is important to be cautious and not underestimate the necessary computing resources. If you do not have access to powerful GPUs, it would be advisable to avoid using large models that require image inputs. Generally, reinforcement learning models that take states as input are less computationally demanding. It is also a good idea to pursue increasing the depth and thoroughness of the project, even in state-based RL.
+
+
+
+The following are three example topic areas.
+
+
+
+1. Algorithm Design
+One approach to designing a new algorithm is to modify the components of an existing algorithm, essentially searching within the space of the "adjacent possible." For example, what happens if a DNN is used in a Fitted Q-Iteration framework? (This can lead to the reinvention of DQN!) Another approach is to incorporate various variance reduction techniques in a policy gradient method. Alternatively, instead of using scalar gains in an online algorithm such as TD, one might use a matrix gain, or even design an adaptive mechanism to change the gain.
+
+
+
+The space of all possible algorithms is vast, but it is important to have a reason for the changes made when designing a new algorithm. While it is not necessary to prove that the algorithm works in theory before testing it empirically, having a theoretical understanding of why the changes are being made can be helpful. It is not productive to randomly try different combinations of components without any justification.
+
+
+
+2. Empirical Analysis
+One possible project is to investigate an existing algorithm through empirical analysis. This involves designing and conducting experiments to understand the behavior of the algorithm and determine its strengths and weaknesses. It is important to note that the original paper that introduced the algorithm may not have explored all relevant questions, and may have only reported successful results. Therefore, investigating the range of problems and conditions that result in the success and failure of the algorithm is necessary. For example, one can study the effect of stochasticity of the environment, learning rate, or the particular exploration technique used on the performance of an online algorithm. Another approach is to evaluate how an algorithm performs on a wide range of environments, including those that were not included in the original paper.
+
+
+
+3. Application
+If your research topic is in a specific area, you can explore whether it can be transformed into a problem that can be solved using reinforcement learning algorithms. Many fields, such as robotics, computer networks, healthcare, and autonomous vehicles, have already successfully applied RL. However, there are still many other areas that have not yet been explored that may fit well within the framework of RL. This is an exciting area for future research.
+
+
+
+If you have any quesiton about the proposal, feel free to contact to TAs.

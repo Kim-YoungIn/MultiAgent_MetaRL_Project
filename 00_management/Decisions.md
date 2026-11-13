@@ -7,5 +7,20 @@
 | D-001 | 현재 작업 기준 | 연구 초점은 Multi-Agent Meta-RL의 Exploration 및 Adaptation | 사용자 정리 및 제안서 |
 | D-002 | 현재 작업 기준 | 2개 Toy Model을 분리해 구현·통합 | 사용자 요청 |
 | D-003 | 현재 작업 가정 | 3개 이산 행동, Memory-One `n^4` 보상 표현 | 확장 가능한 출발점이며 보편적 게임 표현은 아님 |
+| D-004 | 채택 (2026-11-13) | 현재 구현은 Memory-One, 초기 n=3, 환경·규칙·RandomPolicy는 가변 n | 사용자 생각 노트와 설계 위임. 외부 개정안의 n=4 기본값은 채택하지 않음 |
+| D-005 | 채택 (2026-11-13) | 랜덤 초기 state; 독립 균등 초기 행동, 초기 보상 0, 시작 flag 사용 | 랜덤 초기화는 사용자 결정. 분포·보상·flag는 위임된 초기 구현 설계 |
+| D-006 | 채택 (2026-11-13) | 고정 길이 episode 절단, 길이/남은 턴 비노출 | 사용자 결정. 종료는 truncated=True; 실제 학습 길이는 미정 |
+| D-007 | 채택 (2026-11-13) | 논리 RuleSpec → 결정적 Compiler → 고정 RewardTensor | 사용자 원칙과 설계 위임. 작은 가산 primitive 합성으로 시작; 범용 DSL/배율/조건부 대체는 후속 |
+| D-008 | 채택 (2026-11-13) | 에이전트 인터페이스·환경·실행기 우선, 명시적 플레이어별 상태와 transition 기록 | RandomPolicy로 우선 검증. episode마다 정책 상태 초기화; trial/RL²/PPO는 후속 |
+| D-009 | 보류 (2026-11-13) | 최소 체류 길이 이후 확률적 규칙 변경 | 사용자 아이디어이며 최초 구현에는 적용하지 않음. episode 종료와 분리해 검토 |
+| D-010 | 채택 (2026-11-13) | 다음 우선 작업은 단일 실행 JSON 저장과 오프라인 HTML 리포트 | 결과 확인 기능 논의 후 사용자 작업 순위 조정·계속 요청. 연구자용 시각화만 추가, 정책 관측·학습/평가 조건은 유지 |
+| D-011 | 현재 실행 기준 (2026-11-13) | Recurrent PPO의 첫 baseline은 P0 learner vs P1 고정 RandomPolicy | 설계 위임과 계속 진행 요청. Self-Play 확정 아님; 초기/Random/학습/hidden-reset을 같은 외생 draws로 평가 |
+| D-012 | 현재 실행 기준 (2026-11-13) | 유한 trial 동안 hidden 유지·trial 시작 초기화, 중간 episode return 유지, 최종 bootstrap 0 | 기본 2 episodes×12 steps. 마지막 보상은 observe-only 이벤트로 전달; 전체 trial PPO 재생. 단일 episode runner 계약은 유지 |
+| D-013 | 현재 실행 기준 (2026-11-13) | action_bonus diagnostic + shared candidate scorer로 가변 n 실행 검증 | 실제 학습 경로의 공학 검증. 상대 전략 적응/미지 규칙/행동 공간 일반화 검증과 구별. 평가 중 가중치 갱신 없음 |
+| D-014 | 진단 실행 기준 (2026-11-13) | 고정 target 학습·지도학습 조건부 출력·가변 target 40/120update를 분리 진단 | 사용자 계속 진행 요청. 모델/PPO/GPU 기본값 유지, learning seeds 7/17/27, target층화 paired 평가. 결과에 따른 원인 후보만 좁히며 모델 수정은 별도 채택 |
+| D-015 | 분석 실행 기준 (2026-11-13) | 보상/수치 감사와 cyclic 물리→내부 행동 번호 교환의 완전 교차 대조 | 사용자 분석·점검 요청. seed3×physical target3×mapping3, 각40updates. 모델 기본 구조 변경은 채택하지 않음. 분석 checkpoint는 internal 좌표와 permutation을 함께 복원 |
+| D-016 | 현재 구현 기준 (2026-11-13) | 비서열적 action_set_v1과 매 행동 hidden0 비교군 추가, 학습 CLI 기본 선택 | 사용자 계획·작업 속행 요청. 공유 per-action GRU/actor로 label-equivariance 검증. nH 기억 용량 변화 명시. ordinal_v1/v1 checkpoint 보존; 라이브러리 TrainConfig 기본은 과거 재현용 ordinal 유지 |
+| D-017 | 파일럿 기준 (2026-11-13) | 숨은 행동·probe 관계 기억·상대 copy/avoid 반응의 3개 기능 벤치마크 | Memory-One 고정 텐서 및 4필드 관측 유지. probe payoff +1/-3/-.25 또는-.5, 상대별 상한1/1/(n-1). informed prior/Q 온라인 갱신을 구분. H1/H2 검증은 아님 |
+| D-018 | 연구 운영 조정 (2026-11-13) | 다음 중심 작업을 통제된 논리 게임 분포·MA 상대군·규칙 차이·held-out 평가 설계로 전환 | 사용자 독립 검토·연구 분석·조정 요청. 작은 진단의 학습 성공을 Generator 연구의 필수 관문에서 해제. 최초 Toy A/B 인수 조건 완료와 H1/H2 미검증을 구분. 새 문법/모델/상대/예산은 후속 계약에서 확정. `sessions/07_independent_research_review.md` 참조 |
 
 ※ `현재 작업 가정`은 변경 가능한 baseline이고, 연구 가설이 검증되었다는 의미는 아니다.

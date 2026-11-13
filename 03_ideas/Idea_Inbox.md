@@ -1,6 +1,10 @@
-# Idea Inbox — 미채택 후보 목록
+# Idea Inbox — 후보와 검토 상태
 
-이 문서의 항목들은 브레인스토밍에서 나온 **후보**로, 결정이나 구현 요구사항이 아니다. 검토 전에 독립 대안을 먼저 생성하고 비교한다.
+이 문서는 아이디어 색인이다. CANDIDATE/REVIEWED/DEFERRED는 결정이나 구현 요구사항이 아니다.
+채택·구현된 항목도 추적을 위해 남기며 결정 ID/계약과 구분한다. 검토 전에 독립 대안도 비교한다.
+현재 대화 전체의 축어록은 아니며 주요 아이디어·관찰·판단 변경을 요약해 기록한다.
+탐구 경과는 [Research Log](../00_management/Research_Log.md), 생성기 상세 후보는
+[Rule Generator 연구 노트](Rule_Generator_Research_Notes.md)를 따른다.
 
 | ID | 후보 | 기대하는 연구적 가치 | 먼저 확인할 점 | 상태 |
 |---|---|---|---|---|
@@ -13,6 +17,17 @@
 | I-007 | Fixed Opponents vs Co-training vs Snapshot Pool | 상대 변화 속도가 적응에 미치는 영향 | 상대 다양성과 업데이트 방식의 교란 | CANDIDATE |
 | I-008 | Within-task Rule Switch | 게임 중 규칙 변화에 대한 지속 적응 | Task 자체의 의미와 RNN reset 정책 재정의 필요 | CANDIDATE |
 | I-009 | Information-Probe Games | 탐색 행동의 정보적 가치 및 비용 통제 | 관측 보상만으로 규칙 식별 가능성 보장 | CANDIDATE |
-| I-010 | START state / 초기 무작위 joint action | 첫 턴 보상 정의 | 가상 이전 행동의 노출과 첫 턴 표시 | CANDIDATE |
+| I-010 | START state / 초기 무작위 joint action | 첫 턴 보상 정의 | 전용 START 상태 대신 랜덤 이전 joint action·초기보상0·start flag 사용 | ADOPTED — D-005; 전용 START 상태는 미채택 |
+| I-011 | 모델·실험 규모 확대 시 GPU 배치 실행 | 여러 trial의 모델 계산을 묶어 학습 시간 단축 | 먼저 환경/추론/PPO 시간을 측정하고 동일 조건 CPU/GPU 비교; 현재 설정 변경 없음 | DEFERRED — 사용자 요청으로 후속 아이디어만 보존 |
+| I-012 | 논리 조건·조합을 기록하는 Rule Generator | parameter/composition/novel-relation을 분리 통제 | 최소 문법과 전략적 차이; 범용 DSL 자체가 목표가 아님 | PRIORITY DESIGN — D-007/D-018; 추가 연산자는 미확정 |
+| I-013 | 규칙 구조·텐서·전략 차이 측정 | H1/H2의 유사성/다양성 분석 | 배율·재명명·중복, 상대/horizon 의존, 사후 거리 정의의 순환 논리 | REVIEWED — 지표/임계값 미확정 |
+| I-014 | 공유 행동별 recurrent scorer | 숫자형 인코딩 편향 교정과 가변 n 실행 | 후보 간 정보 교환·nH 상태 변화; 범용성/학습 일반화는 별도 | IMPLEMENTED — D-016; 진단 결과 보존 |
+| I-015 | 통제된 이력 반응형 상대군 | self-play 없이 상대 적응·행동 영향 분석 | 상대의 유인·관측·episode/trial 메모리 경계 | PRIORITY DESIGN — D-018; 상대 목록 미확정 |
+| I-016 | n=3 one-hot + 단일 GRU 참조 모델 | 현재 구조에 종속되지 않는 학습 비교 | 라벨 재명명 통제·예산·모델 용량 | REVIEWED — 미구현 |
+| I-017 | LLM을 exploration 보조로 활용 | 논리 사전지식의 정보 수집 활용 | 비용·정보 공개·사전학습 prior 차이; 동료 메모 제안 | CANDIDATE — 우선 구현 아님 |
+| I-018 | 탐색/활용 보상 혼합 및 off-policy 시도 | 동료 보고의 정보 활용·학습 신호 병목 검토 | 별도 구현의 원자료 없음; 목적함수 변경은 새 결정 필요 | EXTERNAL REPORT — 우리 코드 적용/재현 없음 |
+| I-019 | 학습/평가 manifest와 미학습 조합 | 암기·파라미터 전이·구조 전이 구분 | seed만 분리하지 않고 규칙·동등 게임 누수 점검 | PRIORITY DESIGN — D-018 |
+| I-020 | 연결된 전체 실험판 우선 완성 | 생성→MA 구성→혼합 학습→held-out 평가→분석 연결 | 필수 범위와 선택 확장 구분, 단계가 영구 장벽이 되지 않게 함 | REVIEWED — 다음 계약에서 범위 구체화 |
+| I-021 | H1 실패/부정적 전이 가능성 | 성공을 전제하지 않는 연구 | 학습 바닥 성능·노출량·유사성 교란과 구분 | REVIEWED — H1/H2 직접 검증 전 |
 
 아이디어를 채택한 후에만 `00_management/Decisions.md` 및 실제 설계 문서를 수정한다.

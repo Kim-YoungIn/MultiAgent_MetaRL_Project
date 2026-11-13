@@ -1,0 +1,27 @@
+[23이재익] [오후 6:43] 지금 일반 random exploration, q-learning, 저희 연구 trained exploration policy 이런 case로 비교해봤는데
+[23이재익] [오후 6:43] 일단 q-learning 성능이 제일 좋게 나오기는 하네요
+[23이재익] [오후 6:44] 어떻게 보면 저희의 model이 원하는 방향은 pretrained된 foundation model의 개발이니까
+[23이재익] [오후 6:44] 학습을 더 많이 해서 비교를 해본는게 이론상 맞는 방향인 것 같기도 하고.
+[23이재익] [오후 6:45] 저희의 복잡성이나 suboptimal 설정을 q-learning에 random이 쉽게 뚫어버리는것같기도 하고요
+[23이재익] [오후 6:45] 조금더 복잡하게 해야하나 싶긴 하네요
+[23이재익] [오후 6:51] 혹시 toy model 학습이랑 test까지 해서 결과까지 얻으신 분 계신가요?
+[23이재익] [오후 7:00] 아니면 foundation model이라고 생각해보니. llm을 저희 exploration pollicy 로 사용해서 뭐 학습을 한다거나 더 좋은 성능을 보이는지 test해보는것도 나쁘지 않겠다고 생각을 해봤거든요
+[23이재익] [오후 7:07] 그리고 방금 확인했는데 지금 학습은 exploration ppolicy 가 1~K step까지 histroy를 만들고 K+1~T까지 exploitation policy 가 exploit. 그리고 K+1~T까지의 return을 바탕으로 exploration의 학습을 진행하는데, 아무리 exploration이 combo를 찾았다고 하더라도 exploit이 그걸 활용을 못하더라고요. 
+그러면 explore가 잘 찾아도 exploit이 그걸 활용하지 못해서 return에 유의미한 효과가 없었다면 학습 signal이 사라지는 문제가 있었습니다.
+[23이재익] [오후 8:37] 지금 일단 제가 한 부분까지 공유하자면 1~K step explre, K+1~T step exploit으로 진행하고 있으며
+지금 하고 있는 실험은 combo만 넣어서 combo 탐색 잘하는지 확인하고 있습니다.
+model을 여러개를 비교하고 있는데
+1. dual(exploit/explore), tarined explore
+2. dual(exploit/explore), random explore
+3. single model
+4. Q-learning
+이렇게 진행했고 기본적으로 explore policy는 앞에서 history만 만들어주고 exploit policy 가 그걸 이용해 잘 학습할 수 있도록 하는 구조였습니다. 
+근데 위에서 언급한 문제들로 추가적인 실험을 진행한게
+1. off-policy learning으로 진행
+2. exploit return만 signal로 사용하지 않고 앞에 explore에서 발생한 return도 lambda(0에서 1 사이) 로 exploit return이랑 더해서 함께 고려하는 구조로 가져갔습니다. 
+
+또한 추가적인 제안 구조는 이미 여러 논리 구조에 익숙하다고 할 수 있는 llm이라는 foundation model 사용하여 explore 도움 받는 구조도 생각할 수 있을 것 같습니다. 또한 추가적으로 llm에게 학습을 줄 수 있는 signal도 얻어낼 수 있을 것이라 생각합니다. 
+
+또 map은 아직 안 만들었지만 
+combo, 협력/배반, changable reward(아예 같은 상황에서도 달라지는 reward<분포 사용 가능, or random>), 상대 policy 예측 game 이정도로 map 만들어 보고자 합니다.
+지금 실험 중인거 결과 나오면 일단 바로 올려보겠습니다.

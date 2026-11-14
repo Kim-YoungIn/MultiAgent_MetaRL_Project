@@ -26,7 +26,7 @@
 모든 명령은 프로젝트 루트의 WSL/Linux 터미널에서 실행한다.
 환경·규칙·RandomPolicy 실행은 Python 3.10 이상과 표준 라이브러리만 사용한다.
 학습·체크포인트 추론에는 선택 의존성이 필요하다.
-실제 확인한 학습 환경은 WSL2, Python 3.14.4, CPU PyTorch 2.15.0+cpu, NumPy 2.5.4다.
+실제 학습 환경은 WSL2, Python 3.14.4, CPU PyTorch 2.15.0+cpu, NumPy 2.5.4다.
 다른 Python 버전에서 고정 패키지의 설치 가능성은 별도로 확인해야 한다.
 
 ```bash
@@ -34,7 +34,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-training.txt
 ```
 
-현재 모델과 설치 파일은 CPU 실행을 사용한다.
+현재 모델과 설치 파일은 CPU 실행을 사용했다.
 
 ## 생성 게임의 전체 전이 실험
 
@@ -55,7 +55,7 @@ PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.generated_experiment --output
 `information_witness.json`, `experiment.json`, 실행별 체크포인트/평가 기록, source snapshot, `report.html`이다.
 HTML에서 조건별 점수·턴 곡선·기준 정책·생성 규칙을 확인하고 JSON에서 과제별 원자료를 볼 수 있다.
 
-규모를 줄여 연결을 확인할 수도 있다. 이는 학습 성능 실험을 대신하지 않는다.
+규모를 줄여 연결을 확인할 수도 있다.
 
 ```bash
 PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.generated_experiment --output-dir runs/my_generated_smoke --seeds 7 --updates 1 --trials-per-update 1 --max-steps 2 --hidden-size 8 --reps 1

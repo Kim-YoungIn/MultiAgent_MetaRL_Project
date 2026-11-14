@@ -1,6 +1,71 @@
-# Implementation Status — 2026-11-13
+# Implementation Status — 2026-11-14
 
-## 독립 검토 후 현재 평가와 다음 작업
+## 완료: 생성 논리 게임의 첫 연결형 전이 실험
+
+D-019/D-020과 `../04_design/Generated_Transfer_Contract.md`에 따라
+관계/Boolean/조건부 보상 문법→Compiler→MA manifest→공통 정책 학습→held-out 평가→HTML을 연결했다.
+worker는 문법·정보 계산, validator는 독립 테스트, 메인은 task 분포·학습/평가·리포트·통합을 담당했다.
+별도 research_critic 검토의 해석 보완도 반영했다.
+
+새 AST는 eq/ne/AND/OR/NOT과 if/add/scale, 깊이6·노드63을 지원한다.
+최초 sampling은 모든 식에 현재 행동 일치 관계를 포함하는 제한된 분포다.
+30후보에서 비 joint-dependent1개·정규화/재명명 중복5개를 제외해24개를 저장했다.
+공통 대칭 F의 n^4표와 현재2n^4저장을 구분한다. 원 명세·정규화·텐서·hash를 모두 기록한다.
+
+학습 규칙12개, 새 규칙6개, 중첩 구조6개를 만들고, 규칙 수4/12×학습 상대1/3의 네 조건을 비교했다.
+학습 상대는 Random/copy/avoid, 별도 held-out 상대는 자기 보상에 반응하는 win_stay다.
+각 조건의 실제 규칙/상대/조합 수는4/1/4,12/1/12,4/3/9,12/3/28이다.
+모든 모델은 공통56개 평가 과제(제외 조합8·새 규칙18·중첩18·새 상대12)를 각2회 평가했다.
+같은 seed의 초기 모델과 평가 trajectory는 네 조건에서 동일하다.
+
+실제 실행:
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -B -m mamrl.generated_experiment --output-dir runs/generated_transfer_v1
+```
+
+seeds7/17/27,12회 학습, 각40updates·8trials/update·2episodes×12steps, H32/action_set_v1.
+optimizer rollout 행동은 조건·seed당7,680개, 총92,160개다. 별도 frozen 검증/평가 행동은 포함하지 않는다.
+
+| 학습 규칙/상대 수 | 제외 조합 | 새 규칙 | 중첩 구조 | 새 상대 |
+|---|---:|---:|---:|---:|
+| 4 / 1 | 0.108536 | -0.124045 | 0.104360 | 0.141757 |
+| 12 / 1 | 0.092708 | -0.117497 | 0.100154 | 0.128183 |
+| 4 / 3 | 0.099450 | -0.118651 | 0.100116 | 0.174814 |
+| 12 / 3 | 0.092274 | -0.118680 | 0.096103 | 0.151138 |
+
+수치는3 learning seeds의 평균 reward/step이다. 규칙 증가의 일관된 개선은 확인하지 못했다.
+학습 상대 증가의 새 상대 평가 차이는 규칙4에서+.033057, 규칙12에서+.022955로 둘 다3seeds에서 양수였다.
+다만 새 상대의 단순 repeat 기준은.378877, 초기 neural 평균은.173836이었다.
+최고 학습 점수.174814는 초기와 거의 같아, copy-only 학습 대비 상대적 개선과
+절대적인 적응 성공을 구분해야 한다. 과적합 완화 가능성은 후속 가설이다.
+
+정보가 유용한 생성 게임의 존재 사례도 계산했다. 고정된 두 규칙(r000/r005), copy 상대,
+초기상태(1,0),4턴 조건에서 즉시 보상은 행동2가 높지만 최적 누적 보상은 행동1이 높다.
+행동1의 첫 보상정보만 가리면 기대 누적 보상이3.5→3.0으로 감소한다.
+생성 후 분석적으로 찾고 신경망 결과 전에 고정한 제한된 예시이며 분포 대표성이나 neural 탐색 성공의 증거는 아니다.
+
+검증: 메인 전체103 tests,62.698s,OK; 이후 생성 통합17 tests,17.105s,OK.
+Torch 없는 시스템 Python은103 tests,5.042s,OK(skipped=50).
+12개 학습 checkpoint×4개 평가 집합의48회 재평가가 전체 per-task 원자료와 정확히 일치했다.
+같은 seed의 네 조건 초기 trajectory 동일성, 실행별 JSON과 root record의 일치,
+원실행/최종 보고 source hash와 최종 HTML 재생성 일치도 확인했다.
+독립 검증은 손계산 문법/대칭/직렬화/n3·4·5, 분할 변조 거부·12규칙 통제,
+원시/정규화 거리, 동시 행동·관측 경계·PPO 재생, DP와 정보 가치,
+작은 전체 CLI·체크포인트 재현·덮어쓰기 방지를 포함한다.
+
+원실행 source snapshot과 hash를 보존했다. 연구 검토 후 familiarity labels·해석 문구·최종 renderer를
+보완한 source는 reporting_sources와 별도 hash로 기록했으며 학습 분포·trajectory·weights는 바꾸지 않았다.
+모든 결과는 runs에 저장하고 공유용 사본은 만들지 않는다. 동료는 README로 독립 실행한다.
+브라우저 시각 검수는 미실행이다.
+
+주요 한계: 과제당 노출/혼합 비율/학습-평가 거리가 함께 변함; 조합의 새로움이 조건마다 다름;
+중첩 조건과 보상 합성이 함께 변함; posterior는 평가 catalog까지 아는 강한 prior;
+DP는 true task/opponent/horizon을 아는 기대 상한; 전체 SE는 pooled 기술 통계;
+late−early는 상태 방문 변화도 포함. H1/H2 확증이나 기각을 주장하지 않는다.
+후속 분석과 독립 연구 검토는 `sessions/09_generated_transfer_review.md`를 따른다.
+
+## 이전 운영 조정: 독립 검토 후 평가
 
 최초 Toy A/B의 최소 구현·통합 인수 조건은 완료했다. 아래의 추가 학습 진단과 구분한다.
 소프트웨어 정확성/제한된 정보 활용 진단은 수행했지만, 다양성 효과·held-out 전이의 H1/H2 비교는 미실시다.

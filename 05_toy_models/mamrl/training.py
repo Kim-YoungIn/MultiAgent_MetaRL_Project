@@ -20,6 +20,7 @@ from .ppo import compute_gae, ppo_loss
 from .recurrent import RecurrentActorCritic
 from .rollout import EpisodeResult, Transition
 from .rules import RuleSpec, RuleTerm, compile_rule, generate_rule
+from .tensor import RewardTensor
 
 
 @dataclass(frozen=True)
@@ -142,7 +143,7 @@ def collect_trial(model, spec: RuleSpec, *, episodes_per_trial: int,
     validate_seed(seed)
     if type(reset_hidden) is not bool:
         raise TypeError("reset_hidden must be bool")
-    tensor = compile_rule(spec)
+    tensor = spec if isinstance(spec, RewardTensor) else compile_rule(spec)
     seeds = random.Random(seed)
     learner_seed = seeds.getrandbits(63)
     generator = torch.Generator(device="cpu").manual_seed(learner_seed)
@@ -259,7 +260,8 @@ class TrainingResult:
     config: TrainConfig
 
 
-def train(config: TrainConfig, *, checkpoint_callback=None, model_factory=None) -> TrainingResult:
+def train(config: TrainConfig, *, checkpoint_callback=None, model_factory=None,
+          task_sampler=None, evaluation_tasks=None) -> TrainingResult:
     """Train a recurrent baseline, retaining temporal order in every PPO epoch."""
     from copy import deepcopy
 
@@ -267,6 +269,17 @@ def train(config: TrainConfig, *, checkpoint_callback=None, model_factory=None) 
         raise TypeError("checkpoint_callback must be callable")
     if model_factory is not None and not callable(model_factory):
         raise TypeError("model_factory must be callable")
+    if task_sampler is not None and not callable(task_sampler):
+        raise TypeError("task_sampler must be callable")
+
+    def checked_task(task):
+        if not isinstance(task, (tuple, list)) or len(task) != 2:
+            raise TypeError("custom task must be a (rule or tensor, opponent kind) pair")
+        rule, kind = task
+        if getattr(rule, 'n', None) != config.n:
+            raise ValueError("custom task action count must match TrainConfig.n")
+        make_opponent(kind)
+        return rule, kind
     if model_factory is not None:
         factory = model_factory
     elif config.architecture == "ordinal_v1":
@@ -281,10 +294,15 @@ def train(config: TrainConfig, *, checkpoint_callback=None, model_factory=None) 
     initial_model = deepcopy(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     rng = random.Random(config.seed)
-    specs = evaluation_specs(config)
+    custom_evaluation = None if evaluation_tasks is None else tuple(checked_task(t) for t in evaluation_tasks)
+    if custom_evaluation == ():
+        raise ValueError("evaluation_tasks must be nonempty")
+    specs = evaluation_specs(config) if custom_evaluation is None else tuple(t[0] for t in custom_evaluation)
     eval_options = dict(episodes_per_trial=config.episodes_per_trial, max_steps=config.max_steps,
                         seed=config.seed + 2_000_000)
-    if config.opponent_mode != "random":
+    if custom_evaluation is not None:
+        eval_options['opponent_kinds'] = tuple(t[1] for t in custom_evaluation)
+    elif config.opponent_mode != "random":
         eval_options['opponent_kinds'] = evaluation_opponents(config)
     evaluations = [{"update": 0, **evaluate(model, specs, **eval_options)}]
     history = []
@@ -294,10 +312,13 @@ def train(config: TrainConfig, *, checkpoint_callback=None, model_factory=None) 
         batch = []
         for _ in range(config.trials_per_update):
             task_seed = rng.getrandbits(63)
-            spec = sample_task(config.n, config.family, task_seed, fixed_action=config.fixed_action)
-            kind = config.opponent_mode
-            if kind == "mixed":
-                kind = ("copy_previous", "avoid_previous")[random.Random(task_seed + 314159).randrange(2)]
+            if task_sampler is not None:
+                spec, kind = checked_task(task_sampler(task_seed))
+            else:
+                spec = sample_task(config.n, config.family, task_seed, fixed_action=config.fixed_action)
+                kind = config.opponent_mode
+                if kind == "mixed":
+                    kind = ("copy_previous", "avoid_previous")[random.Random(task_seed + 314159).randrange(2)]
             batch.append(collect_trial(model, spec, episodes_per_trial=config.episodes_per_trial,
                                        max_steps=config.max_steps, seed=rng.getrandbits(63), opponent_kind=kind))
         advantages, returns = [], []

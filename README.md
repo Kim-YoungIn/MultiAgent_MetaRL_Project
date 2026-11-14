@@ -1,8 +1,8 @@
 # Multi-Agent Meta-RL — MAMRL
 
 두 에이전트가 논리적 보상 규칙 아래에서 반복 게임을 플레이하는 연구용 토이모델이다.
-현재 구현은 Memory-One 환경, 작은 규칙 생성기와 Compiler, recurrent PPO 학습,
-기능 벤치마크 및 로컬 HTML 리포트를 제공한다.
+현재 구현은 Memory-One 환경, 논리 규칙 생성기와 Compiler, recurrent PPO 학습,
+생성 게임의 전이 실험, 기능 벤치마크 및 로컬 HTML 리포트를 제공한다.
 
 ## 현재 구현
 
@@ -11,9 +11,12 @@
   동일 함수를 적용하는 대칭 규칙이다. 공통 표는 n⁴개, 저장 텐서는 `(2,n,n,n,n)`이다.
 - 논리 규칙을 생성한 후 텐서로 결정적으로 컴파일한다. 기본 생성기는 가산 조합이며,
   `zero_sum`, `coordination`, `memory_one`, `mixed` 가족을 제공한다.
+- 별도 생성 실험은 행동 관계의 일치/불일치와 AND/OR/NOT, 조건부 보상·가산·배율의
+  제한된 문법을 사용한다. 기존 가산 생성 CLI와 구분한다.
 - 초기 joint action은 독립·균등 무작위다. 정책은 직전 자기/상대 행동, 직전 자기 보상,
   episode 시작 표시를 받고 규칙·상대 ID·종료 길이는 받지 않는다.
-- 상대 정책은 Random, 직전 learner 행동을 복사하는 copy, 그 행동을 피하는 avoid가 있다.
+- 상대 정책은 Random, 직전 learner 행동을 복사하는 copy, 그 행동을 피하는 avoid,
+  양의 자기 보상 후 반복하고 그 외에는 전환하는 win_stay가 있다.
 - 학습은 RL² 스타일 recurrent PPO다. 같은 task의 episode 사이에는 learner hidden을 유지하고
   trial 시작에 초기화한다. 평가는 가중치를 고정하고 hidden state를 갱신한다.
 - 실행·학습·다중 seed 진단과 기능 벤치마크 결과를 JSON 및 오프라인 HTML로 저장한다.
@@ -32,6 +35,36 @@ python3 -m venv .venv
 ```
 
 현재 모델과 설치 파일은 CPU 실행을 사용한다.
+
+## 생성 게임의 전체 전이 실험
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.generated_experiment --output-dir runs/my_generated_transfer
+```
+
+논리 규칙 생성→게임/상대 분할→공통 정책 학습→미학습 평가→HTML 분석을 한 명령으로 실행한다.
+기본은12개 학습 규칙,6개 새 규칙,6개 중첩 구조 규칙과4종 상대다.
+중복·상수·자기/상대 현재 행동에 의존하지 않는 후보는 이 MA 실험군에서 사전 제외하고 수를 기록한다.
+
+규칙 수4/12 × 학습 상대 종류1/3의 네 조건을 각각3seeds,40updates,같은 행동 예산으로 학습한다.
+각 모델은 자신의 조건에 속한 여러 게임/상대를 경험한다. 모든 조건을 같은56개 평가 과제에 비교한다.
+평가는 제외한 조합·새 규칙·중첩 구조·새 상대의 네 집합이며, 조건마다 본 규칙/상대 여부도 기록한다.
+`combination` 집합이 순수한 새 조합인 것은 high/high 조건이고 다른 조건에는 새 요소도 포함된다.
+
+출력은 `manifest.json`, `protocol.json`, `distances.json`, `references.json`, `oracle.json`,
+`information_witness.json`, `experiment.json`, 실행별 체크포인트/평가 기록, source snapshot, `report.html`이다.
+HTML에서 조건별 점수·턴 곡선·기준 정책·생성 규칙을 확인하고 JSON에서 과제별 원자료를 볼 수 있다.
+
+규모를 줄여 연결을 확인할 수도 있다. 이는 학습 성능 실험을 대신하지 않는다.
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.generated_experiment --output-dir runs/my_generated_smoke --seeds 7 --updates 1 --trials-per-update 1 --max-steps 2 --hidden-size 8 --reps 1
+```
+
+실제 플레이 보상은 규칙 전체의 양의 affine 변환으로[-1,1]에 맞춘다.
+이는 task 정의의 일부이며, 보상에 반응하는 win_stay의 원규칙 행동을 보존한다는 뜻은 아니다.
+원시·정규화 텐서 차이, 공통 행동 재명명 후 차이, 구조 토큰 차이를 기록한다.
+이 지표들이 전이 난이도나 전략적 거리를 보장하지는 않는다.
 
 ## 게임 실행과 리포트
 
@@ -114,15 +147,21 @@ PYTHONPATH=05_toy_models .venv/bin/python -m unittest discover -s tests -v
 
 - 출력 디렉터리와 리포트 파일은 기존 경로를 덮어쓰지 않는다. 재실행할 때 새 이름을 사용한다.
 - `.venv/`, `runs/`, `checkpoints/` 등은 Git 제외 대상이다. 저장소를 받은 사람은 각자 설치하고 실행한다.
-- 현재 생성기는 작은 가산 문법이다. 범용 조건부 규칙 생성, 규칙 거리, held-out 구조 전이 실험은 아직 구현하지 않았다.
+- 기존 실행 CLI의 생성기는 작은 가산 문법이고, 새 전이 실험은 별도의 제한된 논리 문법을 사용한다.
+  중첩 평가는 조건과 보상 합성 방식이 함께 달라지므로 깊이만의 효과나 새 primitive 발견을 뜻하지 않는다.
 - 현재 학습 상대는 고정 정책이며 self-play와 공동 학습은 구현하지 않았다.
+- Copy/Avoid/Win-stay는 정해진 반응 규칙이다. 상대가 경험으로 가치·전략을 학습하는 경로는 아직 구현하지 않았다.
 - `action_bonus`는 상대 행동과 무관한 진단이다. 기능 벤치마크의 평가 seed 분리도 미학습 규칙 구조 평가를 뜻하지 않는다.
 - 기존 파일럿에서 일부 보상 상승은 있었지만 일관된 신경망 기억·적응 이점은 확인하지 못했다.
-  규칙·상대 다양성 및 재사용 가능한 구조가 전이에 주는 효과는 미검증이다.
+  새 전이 실험도 가설을 지지하는 결과를 보장하지 않는다. 같은 총예산에서는 과제당 노출과 혼합 비율이 다르다.
 - 가족별 보상 척도가 다르므로 생보상으로 전체 순위를 만들지 않는다. Q는 평가 중 표를 갱신하고,
   신경망은 weights를 고정한다. 수작업 기준의 가족 사전지식도 별도로 고려해야 한다.
 - 상대 반응 과제는 두 종류를 균등 평가할 때 자기 직전 행동만 반복해도 평균0.5를 얻는다.
   Random보다 높다는 이유만으로 상대 식별 성공을 주장할 수 없다.
 - n=4/5에서 같은 weights를 실행할 수 있지만, 행동 공간 간 학습 일반화는 검증하지 않았다.
+- 전체 trial 표준오차는 서로 다른 고정 과제의 변동도 섞인 기술적 지표다. 학습 seed SD와 구분한다.
+  초기/후기 보상 차이는 상태 방문 변화도 포함하므로 그 자체를 적응량으로 해석하지 않는다.
+- 생성 실험의 posterior 기준은 평가 과제까지 포함한 유한 catalog prior를 알고, DP 상한은 실제 규칙·상대·남은 길이를 안다.
+  이들의 성적은 동등한 사전지식의 학습 비교나 Nash regret가 아니다.
 - `audit_labels`의 `internal_weights.pt`는 내부 행동 좌표다. 일반 `--checkpoint`에 바로 쓰지 말고
   `mamrl.audit_labels.load_physical_model(path, permutation)`으로 기록된 매핑과 함께 복원한다.

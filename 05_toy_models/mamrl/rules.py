@@ -163,8 +163,12 @@ def evaluate_rule(
 def compile_rule(spec: RuleSpec) -> RewardTensor:
     """Compile a fixed rule into global-player, row-major reward axes."""
 
+    # Import lazily to keep the original rule API independent of the new grammar.
+    from .logical_rules import LogicalRule, compile_logical_rule
+    if isinstance(spec, LogicalRule):
+        return compile_logical_rule(spec)
     if not isinstance(spec, RuleSpec):
-        raise TypeError("spec must be a RuleSpec")
+        raise TypeError("spec must be a RuleSpec or LogicalRule")
     n = spec.n
     values = []
     for player in (0, 1):

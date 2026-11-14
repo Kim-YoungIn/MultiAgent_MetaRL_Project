@@ -2,7 +2,19 @@
 
 ## 연구 목적 (FIXED)
 
-Multi-Agent 반복 게임에서, Meta-Policy 학습이 새로운 규칙과 상대 전략에 대한 **Exploration** 및 **빠른 Adaptation**에 어떤 영향을 주는지 연구한다. 최고 보상·새 알고리즘 개발 자체보다 적응 과정의 실험적 분석을 중시한다. 첫 번째 참고 논문(Mali, 2026)의 Self-Play Meta-RL 구조를 출발점으로 삼되 그대로 재현할 필요는 없다.
+Multi-Agent 반복 게임에서 **더 나은 탐색 전략을 강화학습한 메타 정책이, 새로운 규칙·상대에 대한 에이전트의 적응을 더 빠르게 만들 수 있는가**를 연구한다.
+핵심 비교는 같은 적응 학습기·초기 조건·상호작용 예산에서 탐색 전략이 만든 경험의 유용성과 이후 성능이다(D-021).
+기존 H1/H2의 다양성·재사용 가능한 구조는 이 효과의 조건을 분석하는 축이며 핵심 질문을 대체하지 않는다.
+Self-play 참고 논문에서는 MA 게임 환경과 실험 설계를 참고하며, self-play나 RL²+PPO를 필수 방법으로 고정하지 않는다.
+탐색자/적응 학습기의 역할 구분은 필요하지만 별도 신경망·가중치 생성·특정 inner learner 채택을 뜻하지 않는다.
+본 연구 조건에는 경험에 따라 전략을 학습·갱신하는 상대를 포함한다(D-022).
+고정 Random/copy/avoid/보상 반응형 scripted 상대는 기능 검사·대조군이며 본 실험의 학습 상대를 대체하지 않는다.
+상대 자신의 관측·보상으로 가치 추정/정책/적응 상태가 변해야 하며, self-play나 gradient update 자체가 필수인 것은 아니다.
+최고 보상이나 새 알고리즘 자체보다 탐색과 적응의 실험적 분석을 중시한다.
+
+현재 구현의 직접 목적함수는 recurrent 플레이 정책의 전체 trial 보상이다.
+RL²도 탐색·적응을 암묵적으로 표현할 수 있지만, 현재 실험은 동일 학습기에 주는 경험의 가치를
+탐색 전략별로 분리하지 않았으므로 위 핵심 질문의 직접 검증으로 취급하지 않는다.
 
 ## 현재 실험 작업 가정 (CURRENT; 변경 가능)
 
@@ -16,8 +28,11 @@ Multi-Agent 반복 게임에서, Meta-Policy 학습이 새로운 규칙과 상�
 - 규칙은 논리적 명세를 먼저 생성한 뒤 결정적으로 텐서로 컴파일한다. 규칙 생성 시 seed 기반 무작위성을 사용하되 episode 내 텐서는 고정한다. 임의 보상 텐서를 직접 샘플링하지 않는다.
 - 정책은 관측·자기 내부 상태·행동 수만 받는다. 단일 episode runner는 매번 상태를 초기화한다.
   별도 recurrent 학습 수집기는 같은 규칙의 여러 episode를 유한 trial로 묶어 hidden을 유지하고 trial 시작에 초기화한다.
-- 메타 학습의 출발점은 RL² 스타일 Recurrent Policy + PPO. Independent Self-Play는 우선 검토할 학습 구조이며 아직 최종 확정은 아니다.
+- 현재 구현된 비교 경로는 RL² 스타일 Recurrent Policy + PPO다. 연구 목적의 필수 방법으로 고정하지 않는다.
+  명시적 meta-exploration과 적응 학습기의 연결·학습 신호·평가 계약은 D-021에 따라 다시 정의해야 한다.
 - 첫 학습 구현은 P0 recurrent PPO learner 대 P1 고정 RandomPolicy다. Self-Play는 아직 구현하지 않았다.
+  이후 copy/avoid/win_stay를 추가했지만 상대 자체가 전략을 학습하는 경로는 아직 미구현이다.
+  D-022의 상대 적응을 본 실험의 필수 범위로 두고 더 이상 기능 검사용 고정 상대만으로 대체하지 않는다.
   중간 episode 종료의 최종 관측은 관측 전용 GRU 이벤트로 전달하며 행동/discount timestep을 추가하지 않는다.
   return/GAE는 episode 경계를 넘고, 유한 trial의 최종 bootstrap은 0이다.
 
@@ -52,6 +67,13 @@ probe_memory는 동일 현재 관측/다른 최적 행동의 도달 가능한 �
 이후 공통 정책의 첫 전이 비교를 수행한다. 최초 Toy A/B 최소 구현·통합은 완료했지만 H1/H2는 직접 검증하지 않았다.
 세부 인수 기준과 아직 확정하지 않은 후보는 `sessions/07_independent_research_review.md`, 동료 전달 초안은 `sessions/08_colleague_progress_note.md`를 따른다.
 
+**첫 연결형 전이 실험 (2026-11-14):** D-019/D-020으로 제한된 관계·Boolean·조건부 보상 문법,
+중복/거리/분할 manifest와 공통 정책 학습→held-out 평가→리포트를 연결했다.
+학습 규칙4/12×상대1/3의 네 조건,12개 학습 규칙·6개 새 규칙·6개 중첩 규칙을 사용한다.
+모든 조건의 평가 집합은 같지만 seen-rule/seen-opponent 여부는 조건별로 다르다.
+현재 sampler는 모든 보상식에 현재 행동 일치 관계를 포함하며 범용 게임 분포가 아니다.
+관측·환경 경계·기존 CLI는 유지한다. 실제 실행 결과와 한계는 `Implementation_Status.md`에 기록한다.
+
 ## 주의할 모델링 구분
 
 - `n^4`는 State Space나 Observation Space의 크기가 아니라 **보상 함수의 state–joint-action 입력 조합 수**.
@@ -63,5 +85,6 @@ probe_memory는 동일 현재 관측/다른 최적 행동의 도달 가능한 �
 ## 미확정 사항
 
 연구용 task/trial 길이, 규칙 변경 시점, 최종 PPO 하이퍼파라미터, Exploration 목적함수/정책 분리, 평가 지표·상대 정책 구성은 미확정이다.
+첫 전이 파일럿의 고정 조건은 `../04_design/Generated_Transfer_Contract.md`에 있으며 일반적인 연구 최적값은 아니다.
 실행용 기본값은 별도 `Recurrent_PPO_Contract.md`의 n=3, 2 episodes×12 steps, 40 updates이며 연구적 최적 조건이 아니다.
 단일 episode CLI의 기본 32 step도 실행 예시다. `Open_Questions.md`를 참조한다.

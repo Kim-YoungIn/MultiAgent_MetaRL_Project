@@ -95,3 +95,16 @@ Python 패키지는 `05_toy_models/mamrl/`. 표준 라이브러리만 사용한�
 
 공유 행동 집합 정책, 신규 checkpoint v2와 세 기능 벤치마크는
 `Nominal_Policy_Benchmark_Contract.md`를 따른다. 관측 필드와 환경 state 표현은 확장하지 않는다.
+
+## 생성 논리 게임의 연결형 전이 실험 (2026-11-14)
+
+`Generated_Transfer_Contract.md`는 기존 경로와 별도의 실험 entry point를 명세한다.
+`logical_rules.py`의 불변 Predicate/Payoff/LogicalRule은 비교·Boolean·조건부 보상·가산·배율을 표현하며,
+기존 `compile_rule`이 LogicalRule도 결정적으로 텐서로 컴파일한다.
+`generated_tasks.py`는 규칙 JSON·정규화·중복 hash·조건별 학습 pair와 공통 held-out manifest,
+원시/정규화/재명명 텐서 거리와 구조 토큰 차이를 관리한다.
+`train(...,task_sampler=None,evaluation_tasks=None)`은 기존 기본 경로를 보존한 채
+`task_sampler(seed)->(rule or tensor,opponent_kind)`와 training-only validation pair를 선택적으로 받는다.
+`collect_trial`은 기존 명세, LogicalRule, RewardTensor를 수용하며 learner 입력은 기존4필드 그대로다.
+`mamrl.generated_experiment`가 여러 게임의 공통 정책 학습·평가·원자료·HTML을 연결한다.
+기존 recording.run.json은 기존 RuleSpec 경로이며 새 실험의 schema와 혼용하지 않는다.

@@ -24,6 +24,25 @@ class AvoidPreviousPolicy(RandomPolicy):
         return PolicyOutput(action + (action >= excluded), state)
 
 
+class WinStayPolicy(RandomPolicy):
+    """Repeat after positive own reward, otherwise switch uniformly.
+
+    The start flag deliberately suppresses interpreting the artificial reset
+    reward as experience. No task, tensor or current learner action is used.
+    """
+    def act(self, observation, state, *, n):
+        validate_n(n)
+        own = validate_action(observation.previous_own_action, n)
+        if not isinstance(state, random.Random):
+            raise TypeError('opponent state must be a local random.Random')
+        if observation.episode_start_flag:
+            return PolicyOutput(state.randrange(n), state)
+        if observation.previous_own_reward > 0:
+            return PolicyOutput(own, state)
+        action = state.randrange(n - 1)
+        return PolicyOutput(action + (action >= own), state)
+
+
 def make_opponent(kind: str):
     if kind == 'random':
         return RandomPolicy()
@@ -31,4 +50,6 @@ def make_opponent(kind: str):
         return CopyPreviousPolicy()
     if kind == 'avoid_previous':
         return AvoidPreviousPolicy()
+    if kind == 'win_stay':
+        return WinStayPolicy()
     raise ValueError(f'unknown opponent kind: {kind!r}')

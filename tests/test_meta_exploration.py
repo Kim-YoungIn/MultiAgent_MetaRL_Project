@@ -91,6 +91,32 @@ class MetaTrialContract(unittest.TestCase):
                 return observation.previous_opponent_action
         return Teacher()
 
+    def test_recorded_decision_distributions_use_preupdate_learned_opponent_q(self):
+        from mamrl.meta_exploration_rollout import run_meta_trial
+        trial=run_meta_trial(self.rule(),self.factory,seed=51,steps=12,opponent_profile='rapid')
+        q={}
+        def key(obs):
+            return tuple(obs[k] for k in ('previous_own_action','previous_opponent_action',
+                                         'previous_own_reward','episode_start_flag'))
+        nonuniform=0
+        for event in trial['exploration']+trial['assessment']:
+            state=key(event['observations'][1])
+            values=q.get(state,[0.0]*3)
+            best=max(values);ties=sum(v==best for v in values)
+            expected=[.25/3+(.75/ties if v==best else 0) for v in values]
+            for actual,value in zip(event['opponent_action_probabilities'],expected):
+                self.assertAlmostEqual(actual,value)
+            nonuniform+=sum(abs(p-1/3) for p in expected)>1e-12
+            next_values=q.get(key(event['learning_next_observations'][1]),[0.0]*3)
+            target=event['rewards'][1]+(.95*max(next_values) if not event['terminal'] else 0)
+            action=event['actions'][1]
+            changed=list(values)
+            changed[action]+=.7*(target-values[action])
+            q[state]=changed
+        self.assertGreater(nonuniform,0)
+        self.assertEqual(nonuniform,trial['opponent_nonuniform_action_events'])
+        self.assertEqual(sum(trial['phase_steps'].values()),trial['environment_steps_with_control'])
+
     def test_simultaneous_actions_rewards_observations_and_boundaries(self):
         from mamrl.meta_exploration_rollout import run_meta_trial
 
@@ -264,7 +290,8 @@ class MetaOptimizationContract(unittest.TestCase):
             env=dict(os.environ,OMP_NUM_THREADS='1',MKL_NUM_THREADS='1')
             completed=subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=180)
             self.assertEqual(completed.returncode,0,completed.stderr[-5000:])
-            record=json.loads((directory/'experiment.json').read_text())
+            from mamrl.experiment_artifacts import load_meta_experiment
+            record=load_meta_experiment(directory/'experiment.json')
             protocol=json.loads((directory/'protocol.json').read_text())
             manifest=json.loads((directory/'manifest.json').read_text())
             self.assertEqual(len(record['runs']),1)

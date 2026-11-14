@@ -31,6 +31,9 @@
 | I-021 | H1 실패/부정적 전이 가능성 | 성공을 전제하지 않는 연구 | 학습 바닥 성능·노출량·유사성 교란과 구분 | REVIEWED — H1/H2 직접 검증 전 |
 | I-022 | 완성된 보상 규칙 목록 대신 관계·조건·보상 연산의 문법 | 생성 가능한 게임 구조 자체를 통제하고 조합 전이 분석 | predicate/연산/깊이 제한, 합성 의미와 공통 구조; 사용자 2026-11-14 생각노트 검토 | IMPLEMENTED SUBSET — 후속 프로젝트 진행 위임으로 D-019 채택 |
 | I-023 | 부모/메타 과정의 탐색 전략 생성·선택·학습 | 수집 경험이 새 에이전트의 적응에 주는 효과 | population 선택과 RL 최적화, 게임 안 MA와 게임 밖 meta 과정 구분 | REVIEWED — 목적 예시이며 literal 구조 미채택 |
-| I-024 | Teacher exploration / student improvement meta reward | 탐색 경험의 downstream 학습 가치 직접 최적화 | Xu2018의 단일-agent 연속제어를 MA·새 task 전이와 구분; 상대 학습에 의한 점수 변화 | RESEARCH CANDIDATE — 특정 알고리즘 미채택 |
+| I-024 | Teacher exploration / student improvement meta reward | 탐색 경험의 downstream 학습 가치 직접 최적화 | Xu2018의 단일-agent 연속제어를 MA·새 task 전이와 구분; 상대 학습에 의한 점수 변화 | IMPLEMENTED FIRST PROTOCOL — D-023; 동일 학생/상대 상태의 retained−erased G, 원 논문 재현은 아님 |
+| I-025 | 행동 연결의 의미 관계와 상성·조건·보상·예외 분리 | 승패/반복/모방/예측과 공동 보너스·숨은 행동·예외의 조합 전이 | 현재/이전 결과 구분, 예외 충돌·대칭·상성 의미, 실제 sampler 제약 | IMPLEMENTED SUBSET — D-024; 상성/조건/보상/예외와28규칙 v2 |
+
+| I-026 | 반복=협력/변경=배신의 사회적 게임 표현 | 의미 관계와 보상 순서에 따른 게임 분류 | PD는 최종 보상 T>R>P>S 및 모든 행동 변형의 동등성 필요; n3의 C/D 표본수 차이 | IMPLEMENTED SUBSET — D-024; PD/조정/반조정/협력 우세, balanced/change 대조 |
 
 아이디어를 채택한 후에만 `00_management/Decisions.md` 및 실제 설계 문서를 수정한다.

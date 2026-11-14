@@ -22,10 +22,11 @@
 | D-016 | 현재 구현 기준 (2026-11-13) | 비서열적 action_set_v1과 매 행동 hidden0 비교군 추가, 학습 CLI 기본 선택 | 사용자 계획·작업 속행 요청. 공유 per-action GRU/actor로 label-equivariance 검증. nH 기억 용량 변화 명시. ordinal_v1/v1 checkpoint 보존; 라이브러리 TrainConfig 기본은 과거 재현용 ordinal 유지 |
 | D-017 | 파일럿 기준 (2026-11-13) | 숨은 행동·probe 관계 기억·상대 copy/avoid 반응의 3개 기능 벤치마크 | Memory-One 고정 텐서 및 4필드 관측 유지. probe payoff +1/-3/-.25 또는-.5, 상대별 상한1/1/(n-1). informed prior/Q 온라인 갱신을 구분. H1/H2 검증은 아님 |
 | D-018 | 연구 운영 조정 (2026-11-13) | 다음 중심 작업을 통제된 논리 게임 분포·MA 상대군·규칙 차이·held-out 평가 설계로 전환 | 사용자 독립 검토·연구 분석·조정 요청. 작은 진단의 학습 성공을 Generator 연구의 필수 관문에서 해제. 최초 Toy A/B 인수 조건 완료와 H1/H2 미검증을 구분. 새 문법/모델/상대/예산은 후속 계약에서 확정. `sessions/07_independent_research_review.md` 참조 |
-
 | D-019 | 채택 (2026-11-14) | bounded Predicate/Payoff 문법과 공통 F의 대칭 Compiler 추가 | 사용자 프로젝트 진행 요청과 설계 위임. eq/ne/AND/OR/NOT, if/add/scale, 최대 깊이6·노드63. 기존 가산 CLI 보존. `Generated_Transfer_Contract.md` 참조 |
 | D-020 | 첫 전이 실행 기준 (2026-11-14) | 생성 규칙24개·학습 규칙4/12×상대1/3의 공통 정책 비교와 공통 held-out 평가 | 총예산 일치, training-only validation, 최종 checkpoint 고정. 정규화가 실제 task 정의. 상대 메모리 episode reset/learner trial reset. seed3의 기술적 파일럿이며 H1/H2 확증 아님 |
 | D-021 | 연구 목적 명료화 (2026-11-14) | 핵심은 강화학습된 탐색 전략이 같은 학습기·초기 조건·예산에서 더 유용한 경험을 만들고 적응을 빠르게 하는가 | 사용자 직접 명료화. self-play/단일 RL²/PPO는 필수 아님. 기존 전체 trial 보상 플레이 정책과 탐색의 downstream 효과를 구분. dual 신경망/특정 inner learner/새 관측은 아직 미채택 |
 | D-022 | 연구 조건 명료화 (2026-11-14) | 본 실험에는 상호작용 경험·자기 보상으로 전략을 학습/갱신하는 상대를 포함 | 사용자 직접 지적. 고정 scripted 상대는 기능 검사/대조군으로 제한. task 간 상대 교체·단순 반응·무작위 전환만으로 대체하지 않음. 구체 상대 학습법/속도/reset은 후속 통합 계약에서 확정 |
+| D-023 | 첫 본 목적 파일럿 (2026-11-14) | 메타 탐색자→온라인 Q 적응 학습기→온라인 Q 상대의 downstream 탐색 학습 경로 구현 | 사용자 프로젝트 진행/조정 위임. 탐색12·후속12, 같은 상대 상태에서 학생 Q만 지운 대조12. meta reward=후속−대조, 탐색 즉시보상 미포함. 학생/상대 trial reset·episode 간 유지. 상대 업데이트와 실제 비균등 행동 사용을 기록. `Meta_Exploration_Contract.md` 참조. G와 절대성능 모두 보고하며 이득 보장 아님 |
+| D-024 | 채택·실행 (2026-11-14) | 의미 관계/상성표/조건/보상/예외를 분리한 관계형 생성기와28규칙 v2 catalog, Q+Expected SARSA 학습 상대 | 사용자 독립 탐구·조정 후 진행 요청과 설계 위임. 기존 관측·대칭F·Memory-One·n3·학생Q·메타G·K/H 유지. 반복C/변경D의 최종 compiled PD 판정,5개 사전 사회적 유인층,balanced/change 대조군. v1 보존; 두 축 동시 변경이라 단일 요인 효과 아님. `../04_design/Relational_Game_Contract.md` 참조 |
 
 ※ `현재 작업 가정`은 변경 가능한 baseline이고, 연구 가설이 검증되었다는 의미는 아니다.

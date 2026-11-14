@@ -167,8 +167,11 @@ def compile_rule(spec: RuleSpec) -> RewardTensor:
     from .logical_rules import LogicalRule, compile_logical_rule
     if isinstance(spec, LogicalRule):
         return compile_logical_rule(spec)
+    from .relational_rules import RelationalRule, compile_relational_rule
+    if isinstance(spec, RelationalRule):
+        return compile_relational_rule(spec)
     if not isinstance(spec, RuleSpec):
-        raise TypeError("spec must be a RuleSpec or LogicalRule")
+        raise TypeError("spec must be a RuleSpec, LogicalRule or RelationalRule")
     n = spec.n
     values = []
     for player in (0, 1):

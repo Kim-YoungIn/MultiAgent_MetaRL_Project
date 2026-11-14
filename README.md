@@ -2,7 +2,7 @@
 
 두 에이전트가 논리적 보상 규칙 아래에서 반복 게임을 플레이하는 연구용 토이모델이다.
 현재 구현은 Memory-One 환경, 논리 규칙 생성기와 Compiler, recurrent PPO 학습,
-생성 게임의 전이 실험, 기능 벤치마크 및 로컬 HTML 리포트를 제공한다.
+온라인 학습 상대와의 메타 탐색 실험, 생성 게임의 비교 실험 및 로컬 HTML 리포트를 제공한다.
 
 ## 현재 구현
 
@@ -17,8 +17,11 @@
   episode 시작 표시를 받고 규칙·상대 ID·종료 길이는 받지 않는다.
 - 상대 정책은 Random, 직전 learner 행동을 복사하는 copy, 그 행동을 피하는 avoid,
   양의 자기 보상 후 반복하고 그 외에는 전환하는 win_stay가 있다.
-- 학습은 RL² 스타일 recurrent PPO다. 같은 task의 episode 사이에는 learner hidden을 유지하고
-  trial 시작에 초기화한다. 평가는 가중치를 고정하고 hidden state를 갱신한다.
+- 메타 탐색 경로는 탐색 정책이 만든 경험으로 온라인 Q 학생을 학습시키고,
+  상대도 자기 보상으로 Q 또는 Expected SARSA를 갱신한다. 탐색 정책은 후속 성능 차이로 PPO 학습한다.
+- 관계형 생성기는 명시적 상성표, 승패·반복·모방 관계, 공동 조건 보너스, 숨은 행동 보상,
+  조건부 예외를 지원한다. 최종 텐서에서 PD 여부와 최선반응을 검사하며 규칙 이름으로 판정하지 않는다.
+- 기존 직접 플레이 경로는 RL² 스타일 recurrent PPO다. 두 경로의 목적함수와 상대 학습을 구분한다.
 - 실행·학습·다중 seed 진단과 기능 벤치마크 결과를 JSON 및 오프라인 HTML로 저장한다.
 
 ## 설치
@@ -36,7 +39,76 @@ python3 -m venv .venv
 
 현재 모델과 설치 파일은 CPU 실행을 사용했다.
 
-## 생성 게임의 전체 전이 실험
+## 메타 탐색과 학습하는 상대 — 본 목적 실험
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.meta_exploration --catalog relational --opponent-suite mixed_learning --output-dir runs/my_meta_exploration
+```
+
+| 역할 | 동작 |
+|---|---|
+| 탐색 정책 | 12턴의 탐색 행동을 선택. action_set_v1 recurrent 신경망 |
+| 학생 에이전트 | 탐색 경험으로 온라인 Q 학습 후 12턴 플레이. 후속 구간에서도 계속 학습 |
+| 상대 에이전트 | 두 구간 모두 자기 경험으로 Q 또는 Expected SARSA와 행동 전략 갱신 |
+
+학생과 상대는 trial 시작에 새로 만들고 두 episode 사이에는 학습 상태를 유지한다.
+양쪽은 같은 이전 관측으로 동시에 행동하고 상대의 이번 행동이나 규칙을 직접 받지 않는다.
+후속 구간에서 학생은 greedy Q로 행동하며 상대는 설정된 ε-greedy 학습을 계속한다.
+
+탐색자의 meta reward는 **후속 평균 보상 − 학생 Q만 지운 대조의 평균 보상**이다.
+대조는 탐색이 끝난 같은 상대 Q·난수 상태와 같은 환경 reset에서 시작한다.
+후속 상호작용 때문에 두 분기에서 상대가 다르게 학습하는 것은 허용한다.
+탐색 중 보상을 이 학습 신호에 더하지 않는다. 별도 대조12턴도 비용에 포함하므로
+trial당 실제 게임24턴 + 대조12턴 = 총36턴 simulation이다.
+
+기본은 n=3,3seeds,40updates,update당8trials,H32다. 탐색자의 최종 가중치를 고정하고,
+새 학생/상대의 학습은 허용한 상태로 초기·학습 탐색과 Random·ε-greedy·반복·balanced·변경을 비교한다.
+위 명령은12개 학습 규칙,8개 새 규칙,8개 예외 구조 규칙을 사용한다.
+학습 가족은 social/contest/reciprocity/hidden이며 exception은 구조 평가에만 사용한다.
+사회적 유인층에는 PD·조정·반조정·협력 우세를 포함한다. 새 규칙은 계수만 바뀐 평가가 아니다.
+Q(alpha=.3,epsilon=.15)와 Expected SARSA(.5,.2)로 훈련하고 Expected SARSA(.7,.1)를 별도 평가한다.
+이는 학습에 포함한 알고리즘의 새 설정이며 미사용 알고리즘 전이가 아니다.
+
+반복=C,변경=D로 두면 CC=R,CD=S,DC=T,DD=P를 표현할 수 있다. PD 태그는 최종 보상이
+T>R>P>S이고 모든 이전 상태·같은 C/D 행동군에서 동일한 보상인지 검사한 뒤 붙인다.
+보너스나 예외로 성질이 깨지면 태그가 사라진다. n3의 반복은1개/변경은2개 행동이므로
+Random은 C:D=1:2다. balanced는 반복/변경에 각각1/2을 배정하고 변경 행동 중 균등 선택한다.
+변경 대조군은 항상 이전 자기 행동과 다르게 고른다. 둘 다 숨은 규칙을 보지 않는다.
+
+관계형 원식·상성표·최종 보상 명세·정규화·compiled audit가 manifest에 저장된다.
+리포트의 규칙 설명은 원식이며 실제 플레이는 전체 보상을 양의 affine 변환으로[-1,1]에 맞춘다.
+최선반응·보상/구조 거리는 기술적 지표이며 전략적 다양성이나 탐색 필요성의 보장이 아니다.
+
+두 선택 인자를 생략하면 과거 logical 생성기(12/6/6규칙)와 Q-only 상대 설정을 사용한다.
+과거 실행을 재현하기 위한 기본값이며 관계형 실험은 위 명령처럼 인자를 명시한다.
+
+출력은 `protocol.json`, `manifest.json`, 관계형 `distances.json`, `baselines.json`, `experiment.json`,
+seed별 초기/최종 체크포인트와 학습/평가 기록,source snapshot,`report.html`이다.
+새 실행의 `experiment.json`(저장 형식v3)은 요약과 상세 파일의 경로/hash를 담는다.
+상세 trial은 `baselines.json`과 seed별 `evaluation.json`에 한 번 저장한다.
+분석할 때는 아래 loader로 읽는다. 기존 상세 내장 형식도 같은 함수로 읽을 수 있다.
+실행 폴더를 옮길 때는 참조된 파일을 함께 유지해야 한다.
+
+```python
+from mamrl.experiment_artifacts import load_meta_experiment
+from mamrl.meta_exploration_report import render_meta_report
+
+record = load_meta_experiment("runs/my_meta_exploration/experiment.json")
+# record에는 상세 trials까지 복원된다.
+html = render_meta_report(record)
+```
+
+HTML에서 유지 경험 이득과 절대 후속 성능,탐색 비용,상대의 실제 학습된 행동 사용 비율을 함께 본다.
+G가 커지는 것만으로 절대 성능이 좋아졌다고 해석하지 않는다. 후속1/3/6/전체턴 prefix 평균(AUC/길이),
+턴별 곡선·기술적 기울기·가족별 성능도 제공한다. 기울기에는 방문 상태와 상대 학습 변화가 섞인다.
+
+빠른 연결 확인:
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.meta_exploration --catalog relational --opponent-suite mixed_learning --output-dir runs/my_meta_smoke --seeds 7 --updates 1 --trials-per-update 1 --steps 2 --hidden-size 8 --reps 1
+```
+
+## 기존 생성 게임의 전이 비교
 
 ```bash
 PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.generated_experiment --output-dir runs/my_generated_transfer
@@ -149,8 +221,8 @@ PYTHONPATH=05_toy_models .venv/bin/python -m unittest discover -s tests -v
 - `.venv/`, `runs/`, `checkpoints/` 등은 Git 제외 대상이다. 저장소를 받은 사람은 각자 설치하고 실행한다.
 - 기존 실행 CLI의 생성기는 작은 가산 문법이고, 새 전이 실험은 별도의 제한된 논리 문법을 사용한다.
   중첩 평가는 조건과 보상 합성 방식이 함께 달라지므로 깊이만의 효과나 새 primitive 발견을 뜻하지 않는다.
-- 현재 학습 상대는 고정 정책이며 self-play와 공동 학습은 구현하지 않았다.
-- Copy/Avoid/Win-stay는 정해진 반응 규칙이다. 상대가 경험으로 가치·전략을 학습하는 경로는 아직 구현하지 않았다.
+- 기존 직접 플레이/생성 전이 경로의 Copy/Avoid/Win-stay는 정해진 반응 규칙이다.
+  본 목적 메타 탐색 경로는 별도의 온라인 Q 학습 상대를 사용한다. 두 메타 정책의 self-play는 구현하지 않았다.
 - `action_bonus`는 상대 행동과 무관한 진단이다. 기능 벤치마크의 평가 seed 분리도 미학습 규칙 구조 평가를 뜻하지 않는다.
 - 기존 파일럿에서 일부 보상 상승은 있었지만 일관된 신경망 기억·적응 이점은 확인하지 못했다.
   새 전이 실험도 가설을 지지하는 결과를 보장하지 않는다. 같은 총예산에서는 과제당 노출과 혼합 비율이 다르다.
@@ -163,5 +235,9 @@ PYTHONPATH=05_toy_models .venv/bin/python -m unittest discover -s tests -v
   초기/후기 보상 차이는 상태 방문 변화도 포함하므로 그 자체를 적응량으로 해석하지 않는다.
 - 생성 실험의 posterior 기준은 평가 과제까지 포함한 유한 catalog prior를 알고, DP 상한은 실제 규칙·상대·남은 길이를 안다.
   이들의 성적은 동등한 사전지식의 학습 비교나 Nash regret가 아니다.
+- 메타 탐색은 한 학생 알고리즘과 제한된 생성 분포에서의 실험이다. G는 학생 Q 유지 효과이며
+  순수 정보량이 아니다. 상태 방문·후속 학습·상대에 대한 영향도 성능에 섞인다.
+- 메타 탐색의 ε-greedy 대조는 학생의 명시적 Q를 활용하고, 신경망 탐색자는 관측 이력을 사용한다.
+  같은 경험으로 계산 가능하지만 표현 방식이 다른 대조군이다.
 - `audit_labels`의 `internal_weights.pt`는 내부 행동 좌표다. 일반 `--checkpoint`에 바로 쓰지 말고
   `mamrl.audit_labels.load_physical_model(path, permutation)`으로 기록된 매핑과 함께 복원한다.

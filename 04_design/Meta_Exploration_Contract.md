@@ -18,6 +18,9 @@ snapshot() returns JSON-safe sorted entries and RNG state digest (not live mutab
 clone() copies table AND RNG. Track updates, nonzero parameter changes, sum absolute Q changes,
 and action distribution L1 changes at the updated observation. Plain random/copy policies do not
 meet the learning-opponent requirement. Strategy changes can stop when a particular task is solved.
+Also record the opponent's pre-action probabilities and the fraction of actual decisions that are
+nonuniform due to learned Q. Changes at never-revisited table keys alone do not demonstrate
+that learned strategy influenced the realized interaction.
 
 Opponent profiles: steady(alpha=.3,epsilon=.15,gamma=.95), rapid(.7,.25,.95) for training;
 heldout(.5,.1,.95) for new learning-profile evaluation, not a new opponent algorithm.
@@ -99,3 +102,25 @@ Failure to beat random/epsilon is a result; do not silently change objective/lea
 This experiment tests one teacher architecture+one tabular learning algorithm, not all meta exploration.
 Finite difference controls retained Q rather than all learned information; state occupancy, ongoing
 assessment learning and opponent shaping still affect returns. No H1/H2 or population claims.
+
+## D-024 relational v2 extension
+
+Explicit `--catalog relational --opponent-suite mixed_learning` selects the newer protocol in
+[Relational Game Contract](Relational_Game_Contract.md). It supersedes the v1 catalog/profile counts
+above only for that selection:12train/8fresh/8exception rules, training Q+ExpectedSARSA, heldout
+ExpectedSARSA parameter setting. Adds rule-blind balanced repeat/change and always-change controls,
+family-wise summaries, prefix normalized AUC and descriptive reward slope. Teacher/student/G/K/H,
+observation boundaries and paired erasure remain unchanged. No unseen-algorithm claim.
+Legacy defaults and saved v1 runs remain reproducible.
+
+## Artifact storage and compatibility (2026-11-14 refactor)
+
+Research protocol/metrics remain unchanged. Newly written experiment.json uses storage version3:
+summary/by_family evaluations without detailed trials,plus references to baselines.json and each
+seed's evaluation.json. References carry relative local paths and SHA-256 hashes. The loader
+rejects escaping paths,missing/corrupt data and summaries inconsistent with referenced details.
+`load_meta_experiment(path)` restores the original embedded record version and full trial data;
+it also accepts historical embedded v1/v2 records. The runner still returns the hydrated record,
+and the historical `meta_exploration.render_meta_report` import remains supported.
+Existing run files/source snapshots are not migrated. Reference files are the authoritative details;
+archive/move the complete run directory. This storage change is not a new research protocol.

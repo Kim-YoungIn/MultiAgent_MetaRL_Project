@@ -108,3 +108,21 @@ Python 패키지는 `05_toy_models/mamrl/`. 표준 라이브러리만 사용한�
 `collect_trial`은 기존 명세, LogicalRule, RewardTensor를 수용하며 learner 입력은 기존4필드 그대로다.
 `mamrl.generated_experiment`가 여러 게임의 공통 정책 학습·평가·원자료·HTML을 연결한다.
 기존 recording.run.json은 기존 RuleSpec 경로이며 새 실험의 schema와 혼용하지 않는다.
+
+## 메타 탐색·적응 학습기·학습 상대 (D-023)
+
+`Meta_Exploration_Contract.md`와 `mamrl.meta_exploration`이 현재 본 목적 실행 경로다.
+`adaptive_agents.OnlineQ`는 관측4필드로 자기 Q를 갱신하며 RNG/table을 clone할 수 있다.
+`meta_exploration_rollout.run_meta_trial`은 탐색→학생 평가→학생 Q 제거 대조를 실행하고
+양쪽 로컬 관측·행동·보상·학습 next observation·상대의 pre-action 분포와 상태 snapshot을 반환한다.
+탐색자는 student 객체를 사용하는 경험 기반 대조를 구성할 수 있으나 neural forward는 기존4필드만 사용한다.
+Q 학습 상대는 두 episode 사이에도 유지하고, 매 trial에는 초기화한다. 이는 과거 고정 상대 collector와 별도 계약이다.
+`collect_exploration/replay_exploration/meta_targets/train_meta/evaluate_meta`는 탐색 sequence의 downstream G target과
+full-sequence PPO를 연결한다. 기존 whole-trial gameplay GAE와 같은 목적함수가 아니다.
+
+## 관계형 보상 명세 확장 (D-024)
+
+`compile_rule`은 legacy RuleSpec/LogicalRule 외에 RelationalRule도 기존 RewardTensor로 변환한다.
+관측·동시 행동·상태 전이·episode 경계 계약은 동일하다.
+명시적 상성표/관계/보상/예외와 source/played 직렬화·catalog 계약은
+`Relational_Game_Contract.md`를 따른다. 단일 episode runner의 학습/상대 기본값은 바꾸지 않는다.

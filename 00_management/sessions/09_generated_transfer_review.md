@@ -4,7 +4,7 @@
 
 `Generated_Transfer_Contract.md`의 규칙 생성→MA 구성→공통 정책 학습→held-out 평가→분석 경로를
 실제로 실행했다. 기본12회 학습과103개 테스트,48개 checkpoint/split 재평가를 메인이 확인했다.
-구현 단위와 연구 성공을 구분한다. 상세 실행 증거는 `../Implementation_Status.md`에 있다.
+구현 단위와 연구 성공을 구분한다. 상세 실행 증거는 [당시 구현 증거](../archive/Implementation_Status.md)에 있다.
 실행 결과는 `runs/generated_transfer_v1/`에 두며 동료에게 사본을 넣지 않는다.
 README의 `mamrl.generated_experiment`로 독립 실행한다.
 

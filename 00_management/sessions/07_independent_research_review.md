@@ -12,7 +12,7 @@
 
 - `01_originals/RL_TeamProject_Proposal_metaRL_MA.docx`: H1은 규칙/상대 다양성이 held-out 적응을 개선하는가,
   H2는 전이가 과제 수보다 재사용 가능한 상호작용 패턴에 의존하는가를 묻는다.
-- `04_design/Work_Packages.md`: 최초 Toy A/B는 RandomPolicy 연결, 작은 논리 생성·컴파일,
+- `04_design/archive/Work_Packages.md`: 최초 Toy A/B는 RandomPolicy 연결, 작은 논리 생성·컴파일,
   정적/이력 의존 예제와 정확성 검증이 최소 조건이었다. 일반적 전략 다양성이나 학습 성공은 초기 인수 조건이 아니었다.
 - `03_ideas/MAMRL_Rule_Design_Handoff.md`: 논리 구조·결합·파라미터를 통한 통제 가능한 게임 생성 제안.
   참고 후보이며 n=4 기본값, 모든 연산자, 모든 후속 과제를 자동 채택하지 않는다.

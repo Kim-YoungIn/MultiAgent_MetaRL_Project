@@ -1,6 +1,6 @@
 # 세션: 최초 Toy Model 통합 구현
 
-목표: `04_design/Work_Packages.md`의 Toy A/B 최소 요구를 구현하고, 하나의 규칙 텐서로 두 정책이 상호작용하는 실행 가능한 통합 테스트를 통과시켜라. 현재 단계에는 RL²/PPO 학습을 포함하지 않는다.
+목표: `04_design/archive/Work_Packages.md`의 Toy A/B 최소 요구를 구현하고, 하나의 규칙 텐서로 두 정책이 상호작용하는 실행 가능한 통합 테스트를 통과시켜라. 현재 단계에는 RL²/PPO 학습을 포함하지 않는다.
 
 `Project_Baseline.md`와 `Interface_Contract.md`를 확인한다. 환경・명시적 상태 Policy 인터페이스・실행기를 우선하며, 정적 matrix game → tensor → environment → random agents 경로와 작은 논리 RuleSpec → Compiler 경로를 검증한다. 이후 Memory-One 규칙과 필요한 Variation 및 각각의 테스트를 완성한다. 기본 n=3, 환경·규칙·RandomPolicy의 n=4/5 실행도 확인한다.
 

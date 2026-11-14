@@ -1,4 +1,25 @@
+> 과거 동료 공유 초안. 현재 상태는 [Implementation Status](../Implementation_Status.md)를 따른다. 이 문서에 새 진행을 누적하지 않는다.
+
 # 동료 전달용 진척도와 아이디어 노트 — 2026-11-13
+
+## 최신 확장 (2026-11-14, D-024)
+
+의미 관계/상성/보상/예외를 분리한28규칙 생성기와 Q+Expected SARSA 상대를 구현하고3seed 실행했다.
+전체134개 테스트 및24개 checkpoint/split 재현을 확인했다. 새 규칙은 초기/랜덤 미달이며,
+새 상대 설정은 절대 성능이 상승했지만 경험 유지 G는 소폭 하락했다. 범용 탐색 성공은 미확인이다.
+README의 `--catalog relational --opponent-suite mixed_learning`으로 독립 실행한다.
+상세는 `11_relational_rules_review.md`를 따른다. 아래는 이전 단계 기록이다.
+
+## 이전: 탐색 중심 본 목적 경로 (2026-11-14)
+
+메타 탐색 정책이 만든 경험으로 같은 온라인 Q 학생을 학습시키고,상대도 자기 보상으로
+전략을 학습하는 경로를 구현했다. 후속 성능−학생 경험 제거 대조를 meta reward로 사용한다.
+탐색 즉시 보상을 이 target에 더하지 않으며 G와 절대 후속 성능을 같이 평가한다.
+3seed 실행에서 새 규칙은 초기 대비 상승하되 랜덤 미달,중첩 구조는 하락,
+미학습 상대 Q 학습 설정에서는 초기/랜덤/ε-greedy 대비 상승했다. 범용 우위는 주장하지 않는다.
+전체114개 테스트와24개 checkpoint/split 재평가를 메인이 확인했다.
+실행은 루트 README의 `mamrl.meta_exploration`,상세는 `../archive/Implementation_Status.md`와
+`10_meta_exploration_review.md`를 따른다. 아래는 이전 단계의 이력이다.
 
 ## 2026-11-14 후속 진행
 
@@ -7,7 +28,7 @@
 규칙4/12×상대1/3,3seeds의12회 학습을 실행했다. 규칙 수 증가의 일관된 이점은 없었다.
 상대 다양성은 새 상대 평가에서 개선 방향을 보였지만 단순 repeat와 초기 정책을 넘는
 일관된 적응 성공은 확보하지 못했다. H1/H2를 확정하지 않는다.
-다음 본문은 이전 단계 요약이며, 최신 실제 수치와 검증은 `../Implementation_Status.md`를 따른다.
+다음 본문은 이전 단계 요약이며, 최신 실제 수치와 검증은 `../archive/Implementation_Status.md`를 따른다.
 
 ## 현재 성과
 

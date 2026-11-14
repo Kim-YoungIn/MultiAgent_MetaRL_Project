@@ -17,6 +17,8 @@ from .environment import Observation
 class OnlineQ:
     """Epsilon-greedy online Q learner with local RNG and inspectable audits."""
 
+    algorithm = 'q_learning'
+
     def __init__(self, n, seed, alpha=.5, gamma=.95, epsilon=.2):
         self.n = validate_n(n)
         if validate_seed(seed) is None:
@@ -80,7 +82,7 @@ class OnlineQ:
         reward = finite_reward(reward)
         old_values = self.values(observation)
         before_policy = self.distribution(observation)
-        bootstrap = 0.0 if terminal else max(self.values(next_obs))
+        bootstrap = 0.0 if terminal else self._bootstrap(next_obs)
         new_value = finite_reward(old_values[action] + self.alpha *
                                   (reward + self.gamma * bootstrap - old_values[action]))
         delta = new_value - old_values[action]
@@ -100,13 +102,16 @@ class OnlineQ:
         self.policy_l1_change = finite_reward(self.policy_l1_change + policy_delta)
         return new_value
 
+    def _bootstrap(self, observation):
+        return max(self.values(observation))
+
     def erase_values(self):
         """Erase Q knowledge while preserving RNG, hyperparameters and audit counters."""
         self._q.clear()
 
     def clone(self):
         """Copy all agent state, including independent RNG and the complete Q table."""
-        result = OnlineQ(self.n, 0, self.alpha, self.gamma, self.epsilon)
+        result = type(self)(self.n, 0, self.alpha, self.gamma, self.epsilon)
         result._rng.setstate(self._rng.getstate())
         result._q = {key: list(values) for key,values in self._q.items()}
         result.updates = self.updates
@@ -124,7 +129,16 @@ class OnlineQ:
                                      'episode_start_flag': key[3]},
                     'values': list(self._q[key])} for key in sorted(self._q)]
         digest = hashlib.sha256(repr(self._rng.getstate()).encode('ascii')).hexdigest()
-        return {'n':self.n, 'alpha':self.alpha, 'gamma':self.gamma, 'epsilon':self.epsilon,
+        return {'n':self.n, 'algorithm':self.algorithm, 'alpha':self.alpha, 'gamma':self.gamma, 'epsilon':self.epsilon,
                 'updates':self.updates, 'parameter_changes':self.parameter_changes,
                 'absolute_q_change':self.absolute_q_change, 'policy_changes':self.policy_changes,
                 'policy_l1_change':self.policy_l1_change, 'entries':entries, 'rng_digest':digest}
+
+
+class ExpectedSARSA(OnlineQ):
+    """Same local observations, but on-policy expected TD instead of max-Q TD."""
+
+    algorithm = 'expected_sarsa'
+
+    def _bootstrap(self, observation):
+        return sum(prob*value for prob,value in zip(self.distribution(observation),self.values(observation)))

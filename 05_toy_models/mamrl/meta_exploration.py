@@ -3,7 +3,6 @@
 import argparse
 from dataclasses import asdict, dataclass
 import hashlib
-import html
 import json
 import math
 from pathlib import Path
@@ -15,9 +14,18 @@ from .common import positive_integer, validate_seed
 from .environment import Observation
 from .generated_tasks import build_manifest
 from .logical_rules import rule_from_dict
+from .meta_exploration_report import render_meta_report
+from .experiment_artifacts import save_meta_experiment, load_meta_experiment
 
 
 SPLITS=('train_rule_reference','fresh_rules','structural','new_learning_profile')
+
+
+def decode_rule(data):
+    if isinstance(data,dict) and data.get('format')=='relational_rule':
+        from .relational_rules import relational_from_dict
+        return relational_from_dict(data)
+    return rule_from_dict(data)
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,26 @@ class RepeatExplorer:
     def act(self,obs): return obs.previous_own_action
 
 
+class BalancedExplorer:
+    """Balance repeat/change without knowing whether the true rule calls them C/D."""
+    def __init__(self, *, n, seed, student):
+        self.n,self.rng=n,random.Random(seed)
+    def act(self,obs):
+        if self.rng.random()<.5:
+            return obs.previous_own_action
+        chosen=self.rng.randrange(self.n-1)
+        return chosen+(chosen>=obs.previous_own_action)
+
+
+class ChangeExplorer:
+    """Always choose a different action: a rule-blind stage-defection control."""
+    def __init__(self, *, n, seed, student):
+        self.n,self.rng=n,random.Random(seed)
+    def act(self,obs):
+        chosen=self.rng.randrange(self.n-1)
+        return chosen+(chosen>=obs.previous_own_action)
+
+
 @dataclass(frozen=True)
 class ExplorationRollout:
     events: tuple[Observation,...]
@@ -139,11 +167,15 @@ def meta_targets(rollouts):
     return result
 
 
-def train_meta(config, manifest=None):
+def train_meta(config, manifest=None, *, opponent_suite='q_learning'):
     import torch
     from copy import deepcopy
     from .action_set import ActionSetActorCritic
     from .ppo import ppo_loss
+    from .meta_exploration_rollout import OPPONENT_SUITES
+    if opponent_suite not in OPPONENT_SUITES:
+        raise ValueError('unknown opponent suite')
+    profiles=OPPONENT_SUITES[opponent_suite]['train']
     manifest=build_manifest() if manifest is None else manifest
     rules=[r for r in manifest['rules'] if r['split']=='train']
     model=ActionSetActorCritic(hidden_size=config.hidden_size,seed=config.seed)
@@ -155,9 +187,9 @@ def train_meta(config, manifest=None):
         batch,provenance=[],[]
         for _ in range(config.trials_per_update):
             entry=rules[rng.randrange(len(rules))]
-            profile=('steady','rapid')[rng.randrange(2)]
+            profile=profiles[rng.randrange(len(profiles))]
             trial_seed=rng.getrandbits(63)
-            rollout=collect_exploration(model,rule_from_dict(entry['rule']),seed=trial_seed,
+            rollout=collect_exploration(model,decode_rule(entry['rule']),seed=trial_seed,
                                          steps=config.steps,opponent_profile=profile)
             batch.append(rollout)
             provenance.append({'rule_id':entry['id'],'opponent_profile':profile,'seed':trial_seed,
@@ -194,13 +226,17 @@ def train_meta(config, manifest=None):
     return {'initial_model':initial,'model':model,'history':history,'config':asdict(config)}
 
 
-def meta_tasks(manifest, split):
+def meta_tasks(manifest, split, *, opponent_suite='q_learning'):
     if split not in SPLITS:
         raise ValueError('unknown meta-exploration split')
     source='train' if split in ('train_rule_reference','new_learning_profile') else split
-    profiles=('heldout',) if split=='new_learning_profile' else ('steady','rapid')
+    from .meta_exploration_rollout import OPPONENT_SUITES
+    if opponent_suite not in OPPONENT_SUITES:
+        raise ValueError('unknown opponent suite')
+    suite=OPPONENT_SUITES[opponent_suite]
+    profiles=(suite['heldout'],) if split=='new_learning_profile' else suite['train']
     return tuple({'id':r['id']+'/'+profile,'rule_id':r['id'],'rule':r['rule'],
-                  'opponent_profile':profile,'split':split}
+                  'opponent_profile':profile,'split':split,**({'family':r['family']} if 'family' in r else {})}
                  for r in manifest['rules'] if r['split']==source for profile in profiles)
 
 
@@ -220,10 +256,18 @@ def summarize_meta(rows):
             'exploration_curve':[statistics.mean(r['exploration'][i]['rewards'][0] for r in rows) for i in range(len(rows[0]['exploration']))],
             'mean_opponent_parameter_changes':statistics.mean(r['opponent_final']['parameter_changes'] for r in rows),
             'mean_opponent_policy_l1_change':statistics.mean(r['opponent_final']['policy_l1_change'] for r in rows),
-            'opponent_strategy_changed_trials':sum(r['opponent_final']['policy_l1_change']>1e-12 for r in rows)}
+            'opponent_strategy_changed_trials':sum(r['opponent_final']['policy_l1_change']>1e-12 for r in rows),
+            'mean_opponent_nonuniform_action_events':statistics.mean(r['opponent_nonuniform_action_events'] for r in rows),
+            'opponent_nonuniform_action_fraction':sum(r['opponent_nonuniform_action_events'] for r in rows)/(len(rows)*2*len(rows[0]['assessment']))}
     result['assessment_early']=statistics.mean(result['assessment_curve'][:min(3,len(result['assessment_curve']))])
     result['assessment_late']=statistics.mean(result['assessment_curve'][-min(3,len(result['assessment_curve'])):])
     result['total_gameplay_mean']=statistics.mean((r['exploration_mean']+r['assessment_mean'])/2 for r in rows)
+    curve=result['assessment_curve']
+    budgets=sorted({min(k,len(curve)) for k in (1,3,6,len(curve))})
+    result['assessment_prefix_auc']={str(k):statistics.mean(curve[:k]) for k in budgets}
+    center=(len(curve)-1)/2
+    denominator=sum((i-center)**2 for i in range(len(curve)))
+    result['assessment_slope']=sum((i-center)*v for i,v in enumerate(curve))/denominator if denominator else None
     return result
 
 
@@ -240,10 +284,15 @@ def evaluate_meta(teacher_factory, tasks, *, steps=12,reps=2,seed=918273):
     for task in tasks:
         for rep in range(reps):
             trial_seed=int.from_bytes(hashlib.sha256(f'{seed}/{task["id"]}/{rep}'.encode()).digest()[:8],'big') % 2**63
-            trial=run_meta_trial(rule_from_dict(task['rule']),teacher_factory,seed=trial_seed,
+            trial=run_meta_trial(decode_rule(task['rule']),teacher_factory,seed=trial_seed,
                                  steps=steps,opponent_profile=task['opponent_profile'])
-            rows.append({'task_id':task['id'],'rule_id':task['rule_id'],'split':task['split'],'rep':rep,**trial})
-    return {'summary':summarize_meta(rows),'trials':rows}
+            rows.append({'task_id':task['id'],'rule_id':task['rule_id'],'split':task['split'],'rep':rep,
+                         **({'family':task['family']} if 'family' in task else {}),**trial})
+    result={'summary':summarize_meta(rows),'trials':rows}
+    families=sorted({r['family'] for r in rows if 'family' in r})
+    if families:
+        result['by_family']={f:summarize_meta([r for r in rows if r.get('family')==f]) for f in families}
+    return result
 
 
 def neural_factory(model):
@@ -258,62 +307,37 @@ def _write(path,value):
         stream.write('\n')
 
 
-def render_meta_report(record):
-    esc=lambda x:html.escape(str(x),quote=True)
-    num=lambda x:'—' if x is None else f'{x:.4f}'
-    parts=['<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-           '<title>메타 탐색과 학습하는 상대</title><style>body{font:16px/1.6 system-ui;max-width:1150px;margin:28px auto;padding:0 18px;background:#f5f7fb;color:#152538}table{border-collapse:collapse;width:100%;background:white;margin:18px 0}td,th{border:1px solid #cbd4df;padding:8px;text-align:left}pre{white-space:pre-wrap}svg{background:white;width:100%}</style>',
-           '<h1>메타 탐색 → 적응 학습 → 학습하는 상대</h1>',
-           '<p>탐색자가 만든 경험을 같은 온라인 Q 학습기가 활용합니다. 상대도 자기 경험으로 Q와 전략을 갱신합니다.</p>',
-           f'<p>탐색 {record["protocol"]["steps"]}회 + 실제 평가 {record["protocol"]["steps"]}회 + 경험 제거 대조 {record["protocol"]["steps"]}회. 탐색자의 meta reward는 평가−경험 제거 대조입니다. 탐색 중 보상을 더하지 않습니다.</p>',
-           '<p><a href="experiment.json">전체 원자료</a> · <a href="protocol.json">프로토콜</a> · <a href="manifest.json">생성 규칙</a></p>']
-    labels={'initial':'학습 전 탐색','trained':'메타 학습 탐색','random':'랜덤 탐색','epsilon_greedy':'ε-greedy 탐색','repeat':'반복 탐색'}
-    colors=('#8a50b0','#0068b5','#777','#d26900','#268344')
-    for split in SPLITS:
-        parts.append('<h2>'+esc(split)+'</h2><table><tr><th>탐색 전략</th><th>경험 유지 이득 G</th><th>실제 후속 성능</th><th>경험 제거 성능</th><th>탐색 보상</th><th>실제 게임 전체</th><th>상대 전략 변화</th></tr>')
-        curves={}
-        for method in labels:
-            if method in record['baselines']:
-                stats=record['baselines'][method][split]['summary']
-            else:
-                samples=[r['evaluation'][method][split]['summary'] for r in record['runs']]
-                stats={k:statistics.mean(s[k] for s in samples) for k in ('meta_reward','assessment_mean','erased_mean','exploration_mean','total_gameplay_mean','mean_opponent_policy_l1_change')}
-                stats['assessment_curve']=[statistics.mean(s['assessment_curve'][i] for s in samples) for i in range(len(samples[0]['assessment_curve']))]
-            curves[method]=stats['assessment_curve']
-            parts.append('<tr><td>'+labels[method]+'</td>'+''.join('<td>'+num(stats[k])+'</td>' for k in ('meta_reward','assessment_mean','erased_mean','exploration_mean','total_gameplay_mean','mean_opponent_policy_l1_change'))+'</tr>')
-        parts.append('</table><svg viewBox="0 0 700 160" role="img" aria-label="후속 학습 성능 곡선"><line x1="20" x2="680" y1="80" y2="80" stroke="#bbb"/>')
-        for (method,curve),color in zip(curves.items(),colors):
-            pts=' '.join(f'{20+660*i/max(1,len(curve)-1):.2f},{80-65*v:.2f}' for i,v in enumerate(curve))
-            parts.append(f'<polyline points="{pts}" stroke="{color}" fill="none" stroke-width="2"><title>{labels[method]}</title></polyline>')
-        parts.append('</svg><p>'+ ' · '.join(f'<span style="color:{c}">{labels[m]}</span>' for m,c in zip(curves,colors))+'</p>')
-        parts.append('<details><summary>학습 seed별 결과</summary><pre>'+esc(json.dumps(record['comparisons'][split],ensure_ascii=False,indent=2))+'</pre></details>')
-    parts.append('<h2>구성과 측정의 한계</h2><ul><li>G는 경험을 보존한 Q와 지운 Q의 성능 차이입니다. 순수 정보량이 아니며 학습 능력·상태 방문·상대에 대한 영향도 포함합니다.</li></ul>')
-    parts.append('<p>초기·최종 탐색 가중치는 평가 중 고정하고 학생과 상대의 Q는 갱신합니다. 최종 평가 규칙을 메타 학습에 쓰지 않습니다. 상대 초기 조건은 맞추되 탐색에 반응해 다르게 학습하는 것은 허용합니다.</p>')
-    parts.append('<p>새 학습 profile은 같은 Q 학습법의 미사용 파라미터이며, 새로운 학습 알고리즘이 아닙니다. 생성 분포도 현재 행동 일치 관계를 공통으로 포함하는 제한된 분포입니다. 제한된 seed의 기술 통계이며 H1/H2 확증이 아닙니다.</p></html>')
-    return ''.join(parts)
-
-
-def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_update=8,steps=12,hidden_size=32,reps=2):
+def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_update=8,steps=12,hidden_size=32,reps=2,
+                        catalog='logical',opponent_suite='q_learning'):
     import torch
     from .recurrent import save_checkpoint,load_checkpoint
-    from .meta_exploration_rollout import OPPONENT_PROFILES
+    from .meta_exploration_rollout import OPPONENT_PROFILES,OPPONENT_SUITES
     seeds=tuple(seeds)
     if not seeds or len(set(seeds))!=len(seeds) or any(validate_seed(s) is None for s in seeds):
         raise ValueError('seeds must be unique explicit nonempty seeds')
     for k,v in (('updates',updates),('trials_per_update',trials_per_update),('steps',steps),('hidden_size',hidden_size),('reps',reps)):
         positive_integer(v,k)
+    if catalog not in ('logical','relational') or opponent_suite not in OPPONENT_SUITES:
+        raise ValueError('unknown catalog or opponent suite')
     p=Path(output_dir);p.mkdir(parents=True,exist_ok=False)
     sources=p/'sources';sources.mkdir()
     hashes={}
     for file in sorted(Path(__file__).parent.glob('*.py')):
         data=file.read_bytes();(sources/file.name).write_bytes(data)
         hashes[file.name]=hashlib.sha256(data).hexdigest()
-    manifest=build_manifest()
+    if catalog=='relational':
+        from .relational_catalog import build_relational_manifest,relational_distances
+        manifest=build_relational_manifest()
+        _write(p/'distances.json',relational_distances(manifest))
+    else:
+        manifest=build_manifest()
     _write(p/'manifest.json',manifest)
-    protocol={'version':1,'seeds':list(seeds),'updates':updates,'trials_per_update':trials_per_update,
+    protocol={'version':2,'catalog':catalog,'opponent_suite':opponent_suite,'seeds':list(seeds),'updates':updates,'trials_per_update':trials_per_update,
               'steps':steps,'hidden_size':hidden_size,'reps':reps,'n':3,'device':'cpu',
-              'torch_version':str(torch.__version__),'source_sha256':hashes,
-              'opponent_profiles':OPPONENT_PROFILES,'training_profiles':['steady','rapid'],
+              'torch_version':str(torch.__version__),'torch_threads':torch.get_num_threads(),
+              'python_version':sys.version,'source_sha256':hashes,
+              'opponent_profiles':OPPONENT_PROFILES,'training_profiles':list(OPPONENT_SUITES[opponent_suite]['train']),
+              'heldout_profile':OPPONENT_SUITES[opponent_suite]['heldout'],
               'student':{'algorithm':'tabular Q','alpha':.5,'gamma':.95,'assessment_epsilon':0},
               'objective':'assessment_mean minus paired erased-student assessment_mean; no exploration reward',
               'inner_training_gameplay_steps_per_seed':updates*trials_per_update*steps*2,
@@ -322,16 +346,19 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
               'selection':'fixed final checkpoint; final task results never select weights',
               'scope':'one learner algorithm and bounded generated distribution, not general meta-exploration proof'}
     _write(p/'protocol.json',protocol)
-    tasks={s:meta_tasks(manifest,s) for s in SPLITS}
+    tasks={s:meta_tasks(manifest,s,opponent_suite=opponent_suite) for s in SPLITS}
     options={'steps':steps,'reps':reps}
     baselines={}
-    for name,factory in (('random',RandomExplorer),('epsilon_greedy',EpsilonExplorer),('repeat',RepeatExplorer)):
+    reference_factories=[('random',RandomExplorer),('epsilon_greedy',EpsilonExplorer),('repeat',RepeatExplorer),('balanced',BalancedExplorer)]
+    if catalog=='relational': reference_factories.append(('change',ChangeExplorer))
+    for name,factory in reference_factories:
         print('[baseline '+name+']',file=sys.stderr,flush=True)
         baselines[name]={s:evaluate_meta(factory,t,**options) for s,t in tasks.items()}
     _write(p/'baselines.json',baselines)
-    record={'version':1,'protocol':protocol,'baselines':baselines,'runs':[],'comparisons':{}}
+    record={'version':2,'protocol':protocol,'baselines':baselines,'runs':[],'comparisons':{},
+            'rule_catalog':manifest['rules'] if catalog=='relational' else []}
     for seed in seeds:
-        result=train_meta(MetaConfig(seed=seed,updates=updates,trials_per_update=trials_per_update,steps=steps,hidden_size=hidden_size),manifest)
+        result=train_meta(MetaConfig(seed=seed,updates=updates,trials_per_update=trials_per_update,steps=steps,hidden_size=hidden_size),manifest,opponent_suite=opponent_suite)
         d=p/f'seed{seed}';d.mkdir()
         save_checkpoint(result['initial_model'],d/'initial.pt');save_checkpoint(result['model'],d/'policy.pt')
         initial,trained=load_checkpoint(d/'initial.pt'),load_checkpoint(d/'policy.pt')
@@ -347,7 +374,7 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
             values=[r['evaluation']['trained'][s]['summary'][metric] for r in record['runs']]
             record['comparisons'][s][metric]={'trained_seed_values':values,'trained_mean':statistics.mean(values),
                                              'learning_seed_sd':statistics.stdev(values) if len(values)>1 else None}
-            for reference in ('initial','random','epsilon_greedy','repeat'):
+            for reference in ('initial',*baselines):
                 diffs=[]
                 for row in record['runs']:
                     target=row['evaluation']['trained'][s]
@@ -357,7 +384,7 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
                     assert set(a)==set(b)
                     diffs.append(statistics.mean(a[k][metric]-b[k][metric] for k in a))
                 record['comparisons'][s][metric]['minus_'+reference]={'seed_differences':diffs,'mean':statistics.mean(diffs)}
-    _write(p/'experiment.json',record)
+    save_meta_experiment(p/'experiment.json',record)
     (p/'report.html').write_text(render_meta_report(record),encoding='utf-8')
     return record
 
@@ -366,12 +393,15 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--seeds',type=int,nargs='+',default=[7,17,27])
+    parser.add_argument('--catalog',choices=('logical','relational'),default='logical')
+    parser.add_argument('--opponent-suite',choices=('q_learning','mixed_learning'),default='q_learning')
     for name,value in (('updates',40),('trials-per-update',8),('steps',12),('hidden-size',32),('reps',2)):
         parser.add_argument('--'+name,type=int,default=value)
     args=parser.parse_args()
     try:
         run_meta_experiment(args.output_dir,seeds=args.seeds,updates=args.updates,trials_per_update=args.trials_per_update,
-                            steps=args.steps,hidden_size=args.hidden_size,reps=args.reps)
+                            steps=args.steps,hidden_size=args.hidden_size,reps=args.reps,
+                            catalog=args.catalog,opponent_suite=args.opponent_suite)
     except (TypeError,ValueError,OSError,RuntimeError) as exc:
         parser.error(str(exc))
 

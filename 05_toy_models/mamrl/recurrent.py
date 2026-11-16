@@ -1,7 +1,7 @@
 """A variable-action recurrent actor-critic and explicit-state policy adapter.
 
 This optional module requires PyTorch. Core environment and random-policy
-modules do not import it. All model inputs, parameters, and RNGs are CPU-only.
+modules do not import it. Model inputs and RNGs follow the model device.
 """
 
 from __future__ import annotations
@@ -45,12 +45,16 @@ class RecurrentActorCritic(nn.Module):
                 nn.Linear(self.hidden_size, 1),
             )
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     architecture_kind = "ordinal_v1"
 
     def initial_hidden(self, *, n: int | None = None) -> torch.Tensor:
         if n is not None:
             validate_n(n)
-        return torch.zeros(self.hidden_size, dtype=torch.float32, device="cpu")
+        return torch.zeros(self.hidden_size, dtype=torch.float32, device=self.device)
 
     def forward_observation(
         self, observation: Observation, hidden: torch.Tensor, *, n: int
@@ -67,18 +71,18 @@ class RecurrentActorCritic(nn.Module):
             raise TypeError("hidden must be a torch.Tensor")
         if hidden.shape != (self.hidden_size,):
             raise ValueError(f"hidden must have shape ({self.hidden_size},)")
-        if hidden.device.type != "cpu" or hidden.dtype != torch.float32:
-            raise ValueError("hidden must be a float32 CPU tensor")
+        if hidden.device != self.device or hidden.dtype != torch.float32:
+            raise ValueError("hidden must match the model device and be float32")
         if not torch.isfinite(hidden).all().item():
             raise ValueError("hidden must be finite")
 
         features = torch.tensor(
             [own / (n - 1), opponent / (n - 1), float(own == opponent),
              math.tanh(reward / 4), float(observation.episode_start_flag), 1 / n],
-            dtype=torch.float32,
+            dtype=torch.float32, device=self.device,
         )
         next_hidden = self.gru(features, hidden)
-        actions = torch.arange(n, dtype=torch.float32)
+        actions = torch.arange(n, dtype=torch.float32, device=self.device)
         candidates = torch.stack(
             (actions / (n - 1), (actions == own).float(), (actions == opponent).float()), dim=1
         )
@@ -108,7 +112,7 @@ class RecurrentPolicy:
     def initial_state(self, *, n: int, seed: int | None = None) -> RecurrentState:
         validate_n(n)
         seed = validate_seed(seed)
-        generator = torch.Generator(device="cpu")
+        generator = torch.Generator(device=self.model.device)
         if seed is None:
             generator.seed()
         else:
@@ -162,7 +166,7 @@ def save_checkpoint(model: RecurrentActorCritic, path: str | Path) -> None:
     if not isinstance(model, RecurrentActorCritic):
         raise TypeError("model must be a RecurrentActorCritic")
     kind = model.architecture_kind
-    state = _check_state_dict(model.state_dict(), model.hidden_size, kind)
+    state = _check_state_dict({k: v.detach().cpu() for k, v in model.state_dict().items()}, model.hidden_size, kind)
     architecture = {"hidden_size": model.hidden_size}
     if kind != "ordinal_v1":
         architecture["kind"] = kind
@@ -171,11 +175,11 @@ def save_checkpoint(model: RecurrentActorCritic, path: str | Path) -> None:
     # Serialize first so serialization failures do not create a partial file.
     data = io.BytesIO()
     torch.save(payload, data)
-    with Path(path).open("xb") as stream:
-        stream.write(data.getvalue())
+    from .run_files import write_bytes_exclusive
+    write_bytes_exclusive(path, data.getvalue())
 
 
-def load_checkpoint(path: str | Path) -> RecurrentActorCritic:
+def load_checkpoint(path: str | Path, device="cpu") -> RecurrentActorCritic:
     """Load only weights, verify the exact format, and return a CPU model."""
     payload = torch.load(Path(path), map_location="cpu", weights_only=True)
     if not isinstance(payload, dict) or set(payload) != {"format_version", "architecture", "state_dict"}:
@@ -198,4 +202,4 @@ def load_checkpoint(path: str | Path) -> RecurrentActorCritic:
         from .action_set import ActionSetActorCritic
         model = ActionSetActorCritic(hidden_size=hidden_size, seed=0, memoryless=(kind == "action_set_ff_v1"))
     model.load_state_dict(state, strict=True)
-    return model
+    return model.to(device)

@@ -5,18 +5,20 @@ import json
 import statistics
 
 def render_meta_report(record):
+    assessment_steps=record['protocol'].get('assessment_steps',record['protocol']['steps'])
     esc=lambda x:html.escape(str(x),quote=True)
     num=lambda x:'—' if x is None else f'{x:.4f}'
     parts=['<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
            '<title>메타 탐색과 학습하는 상대</title><style>body{font:16px/1.6 system-ui;max-width:1150px;margin:28px auto;padding:0 18px;background:#f5f7fb;color:#152538}table{border-collapse:collapse;width:100%;background:white;margin:18px 0}td,th{border:1px solid #cbd4df;padding:8px;text-align:left}pre{white-space:pre-wrap}svg{background:white;width:100%}</style>',
            '<h1>메타 탐색 → 적응 학습 → 학습하는 상대</h1>',
            '<p>탐색자가 만든 경험을 같은 온라인 Q 학습기가 활용합니다. 상대도 자기 경험으로 Q와 전략을 갱신합니다.</p>',
-           f'<p>탐색 {record["protocol"]["steps"]}회 + 실제 평가 {record["protocol"]["steps"]}회 + 경험 제거 대조 {record["protocol"]["steps"]}회. 탐색자의 meta reward는 평가−경험 제거 대조입니다. 탐색 중 보상을 더하지 않습니다.</p>',
+           f'<p>탐색 {record["protocol"]["steps"]}회 + 실제 평가 {assessment_steps}회 + 경험 제거 대조 {assessment_steps}회. 탐색자의 meta reward는 평가−경험 제거 대조입니다. 탐색 중 보상을 더하지 않습니다.</p>',
            '<p><a href="experiment.json">전체 원자료</a> · <a href="protocol.json">프로토콜</a> · <a href="manifest.json">생성 규칙</a></p>']
     labels={'initial':'학습 전 탐색','trained':'메타 학습 탐색','random':'랜덤 탐색','epsilon_greedy':'ε-greedy 탐색','repeat':'반복 탐색'}
     if 'balanced' in record['baselines']: labels['balanced']='반복/변경 50:50'
     if 'change' in record['baselines']: labels['change']='항상 변경'
-    colors=('#8a50b0','#0068b5','#777','#d26900','#268344','#a17a00','#477b8b')
+    if 'systematic' in record['baselines']:labels['systematic']='행동 순환 탐색'
+    colors=('#8a50b0','#0068b5','#777','#d26900','#268344','#a17a00','#477b8b','#b14565')
     for split in record['comparisons']:
         parts.append('<h2>'+esc(split)+'</h2><table><tr><th>탐색 전략</th><th>경험 유지 이득 G</th><th>실제 후속 성능</th><th>경험 제거 성능</th><th>탐색 보상</th><th>실제 게임 전체</th><th>상대 분포 변화 누계</th><th>학습된 비균등 상대 행동 비율</th></tr>')
         curves={}
@@ -40,10 +42,10 @@ def render_meta_report(record):
             stats_list=[record['baselines'][method][split]['summary']] if method in record['baselines'] else [r['evaluation'][method][split]['summary'] for r in record['runs']]
             budgets=stats_list[0]['assessment_prefix_auc']
             def prefix(k):
-                key=str(min(k,record['protocol']['steps']))
+                key=str(min(k,assessment_steps))
                 return statistics.mean(s['assessment_prefix_auc'][key] for s in stats_list)
-            slope=statistics.mean(s['assessment_slope'] for s in stats_list) if record['protocol']['steps']>1 else None
-            parts.append('<tr><td>'+label+'</td>'+''.join('<td>'+num(v)+'</td>' for v in (prefix(3),prefix(6),prefix(record['protocol']['steps']),slope))+'</tr>')
+            slope=statistics.mean(s['assessment_slope'] for s in stats_list) if assessment_steps>1 else None
+            parts.append('<tr><td>'+label+'</td>'+''.join('<td>'+num(v)+'</td>' for v in (prefix(3),prefix(6),prefix(assessment_steps),slope))+'</tr>')
         parts.append('</table></details>')
         families=record['runs'][0]['evaluation']['trained'][split].get('by_family',{})
         if families:
@@ -61,6 +63,8 @@ def render_meta_report(record):
     parts.append('<p>초기·최종 탐색 가중치는 평가 중 고정하고 학생과 상대의 Q는 갱신합니다. 최종 평가 규칙을 메타 학습에 쓰지 않습니다. 상대 초기 조건은 맞추되 탐색에 반응해 다르게 학습하는 것은 허용합니다.</p>')
     if record['protocol'].get('catalog')=='relational':
         parts.append('<p>사회적 반복/변경·상성·상호 이력·숨은 보상·예외를 포함하는 제한된 관계 분포입니다. 현재 행동 일치를 모든 게임에 강제하지 않습니다. 상대는 Q-learning과 Expected SARSA이며 새 설정은 이미 학습한 Expected SARSA의 파라미터 변화입니다. 이전 catalog 결과와의 차이는 생성기 또는 상대 중 하나의 인과 효과가 아닙니다.</p>')
+    elif record['protocol'].get('catalog')=='probe_template':
+        parts.append('<p>공통 safe/risk/marker Template의 미학습 파라미터와 반복·모방 보너스 재조합을 분리합니다. 역할 재명명은 독립 구조 다양성으로 세지 않습니다. 정보가치의 정확 계산은 고정 상대 대조이며 실제 학습 상대의 성공 보장이 아닙니다.</p>')
     else:
         parts.append('<p>기존 논리 catalog는 현재 행동 일치 관계를 공통으로 포함합니다. 상대 suite에 따라 사용 알고리즘을 protocol에서 확인하세요.</p>')
     parts.append('<p>균등 행동은 n=3에서 반복/변경을1:2로 만듭니다. 50:50 대조도 숨은 규칙은 알지 못합니다. PD의 즉시 우월성은 반복게임의 최적 전략이나 모든 변경 행동의 장기적 동등성을 보장하지 않습니다. 제한된 seed의 기술 통계이며 H1/H2 확증이 아닙니다.</p></html>')

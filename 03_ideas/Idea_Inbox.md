@@ -18,7 +18,7 @@
 | I-008 | Within-task Rule Switch | 게임 중 규칙 변화에 대한 지속 적응 | Task 자체의 의미와 RNN reset 정책 재정의 필요 | CANDIDATE |
 | I-009 | Information-Probe Games | 탐색 행동의 정보적 가치 및 비용 통제 | 관측 보상만으로 규칙 식별 가능성 보장 | CANDIDATE |
 | I-010 | START state / 초기 무작위 joint action | 첫 턴 보상 정의 | 전용 START 상태 대신 랜덤 이전 joint action·초기보상0·start flag 사용 | ADOPTED — D-005; 전용 START 상태는 미채택 |
-| I-011 | 모델·실험 규모 확대 시 GPU 배치 실행 | 여러 trial의 모델 계산을 묶어 학습 시간 단축 | 먼저 환경/추론/PPO 시간을 측정하고 동일 조건 CPU/GPU 비교; 현재 설정 변경 없음 | DEFERRED — 사용자 요청으로 후속 아이디어만 보존 |
+| I-011 | 모델·실험 규모 확대 시 GPU 배치 실행 | 여러 trial의 모델 계산을 묶어 학습 시간 단축 | 먼저 환경/추론/PPO 시간을 측정하고 동일 조건 CPU/GPU 비교; 현재 설정 변경 없음 | IMPLEMENTED SUBSET — D-026/027; 장치/배치/재개, RTX CUDA 실측 완료; Colab 자체 미실행 |
 | I-012 | 논리 조건·조합을 기록하는 Rule Generator | parameter/composition/novel-relation을 분리 통제 | 최소 문법과 전략적 차이; 범용 DSL 자체가 목표가 아님 | IMPLEMENTED SUBSET — D-019; 제한된 Boolean/if/add/scale |
 | I-013 | 규칙 구조·텐서·전략 차이 측정 | H1/H2의 유사성/다양성 분석 | 배율·재명명·중복·상대/horizon 의존, 사후 거리 정의의 순환 논리 | IMPLEMENTED SUBSET — 원시/정규화/재명명 텐서·구조 token 차이; 전략 거리 미구현 |
 | I-014 | 공유 행동별 recurrent scorer | 숫자형 인코딩 편향 교정과 가변 n 실행 | 후보 간 정보 교환·nH 상태 변화; 범용성/학습 일반화는 별도 | IMPLEMENTED — D-016; 진단 결과 보존 |

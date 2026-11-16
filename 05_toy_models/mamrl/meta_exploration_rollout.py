@@ -51,7 +51,23 @@ def _mean(events, player=0):
     return statistics.mean(item['rewards'][player] for item in events)
 
 
-def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='steady'):
+def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='steady', assessment_steps=None, state_capture=None):
+    """Drive one stream with a local teacher; identical contract to batched trials."""
+    if not callable(teacher_factory):
+        raise TypeError('teacher_factory must be callable')
+    stream = meta_trial_stream(rule, seed=seed, steps=steps, opponent_profile=opponent_profile,assessment_steps=assessment_steps,state_capture=state_capture)
+    observation, n, teacher_seed, student = next(stream)
+    teacher = teacher_factory(n=n, seed=teacher_seed, student=student)
+    if not callable(getattr(teacher, 'act', None)):
+        raise TypeError('teacher_factory must return an object with act(observation)')
+    while True:
+        try:
+            observation, _, _, _ = stream.send(teacher.act(observation))
+        except StopIteration as result:
+            return result.value
+
+
+def meta_trial_stream(rule, *, seed, steps=12, opponent_profile='steady', assessment_steps=None, state_capture=None):
     """Collect exploration, downstream assessment, and a paired Q-erasure control.
 
     Assessment is run twice from identical environment and opponent RNG/table
@@ -60,10 +76,9 @@ def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='s
     learning, so future opponent actions are allowed to diverge between branches.
     """
     positive_integer(steps, 'steps')
+    assessment_steps=steps if assessment_steps is None else positive_integer(assessment_steps,'assessment_steps')
     if validate_seed(seed) is None:
         raise TypeError('trial requires an explicit seed')
-    if not callable(teacher_factory):
-        raise TypeError('teacher_factory must be callable')
     if opponent_profile not in OPPONENT_PROFILES:
         raise ValueError('unknown opponent profile')
     tensor = rule if isinstance(rule, RewardTensor) else compile_rule(rule)
@@ -76,16 +91,12 @@ def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='s
     opponent = opponent_class(tensor.n, seeds['opponent'], **{k:v for k,v in profile.items() if k!='algorithm'})
     student_initial = student.snapshot()
     opponent_initial = opponent.snapshot()
-    teacher = teacher_factory(n=tensor.n, seed=seeds['teacher'], student=student)
-    if not callable(getattr(teacher, 'act', None)):
-        raise TypeError('teacher_factory must return an object with act(observation)')
-
     exploration_env, observations = _make_env(tensor, steps, seeds['exploration_reset'])
-    assessment_env, assessment_start = _make_env(tensor, steps, seeds['assessment_reset'])
+    assessment_env, assessment_start = _make_env(tensor, assessment_steps, seeds['assessment_reset'])
     exploration = []
     for index in range(steps):
         # Simultaneous actions: neither learner sees the other's current action.
-        a0 = validate_action(teacher.act(observations[0]), tensor.n)
+        a0 = validate_action((yield (observations[0], tensor.n, seeds['teacher'], student)), tensor.n)
         opponent_probs = opponent.distribution(observations[1])
         a1 = opponent.act(observations[1])
         result = exploration_env.step(a0, a1)
@@ -101,28 +112,16 @@ def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='s
     erased_student.erase_values()
     erased_student_before = erased_student.snapshot()
     erased_opponent_before = erased_opponent.snapshot()
-    erased_env, erased_start = _make_env(tensor, steps, seeds['assessment_reset'])
+    erased_env, erased_start = _make_env(tensor, assessment_steps, seeds['assessment_reset'])
     if erased_start != assessment_start:
         raise RuntimeError('paired assessment reset mismatch')
 
-    def assess(env, initial, learner, adversary):
-        observations = initial
-        records = []
-        for index in range(steps):
-            # Student always assesses greedily; adversary follows its learning profile.
-            a0 = learner.act(observations[0], epsilon=0.0)
-            opponent_probs = adversary.distribution(observations[1])
-            a1 = adversary.act(observations[1])
-            result = env.step(a0,a1)
-            terminal = index == steps-1
-            learner.update(observations[0],a0,result.rewards[0],result.observations[0],terminal=terminal)
-            adversary.update(observations[1],a1,result.rewards[1],result.observations[1],terminal=terminal)
-            records.append(_event(observations,(a0,a1),result,result.observations,terminal,opponent_probs))
-            observations = result.observations
-        return records
+    if state_capture is not None:
+        state_capture.update(student=student.clone(),opponent=opponent.clone(),
+                             tensor=tensor,seeds=dict(seeds),assessment_steps=assessment_steps)
 
-    assessment = assess(assessment_env, assessment_start, student, opponent)
-    erased_assessment = assess(erased_env, erased_start, erased_student, erased_opponent)
+    assessment = assess_pair(assessment_env, assessment_start, student, opponent,assessment_steps)
+    erased_assessment = assess_pair(erased_env, erased_start, erased_student, erased_opponent,assessment_steps)
     exploration_mean = _mean(exploration)
     assessment_mean = _mean(assessment)
     erased_mean = _mean(erased_assessment)
@@ -130,7 +129,7 @@ def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='s
             'exploration':exploration, 'assessment':assessment, 'erased_assessment':erased_assessment,
             'exploration_mean':exploration_mean, 'assessment_mean':assessment_mean,
             'erased_mean':erased_mean, 'meta_reward':assessment_mean-erased_mean,
-            'gameplay_mean':statistics.mean((exploration_mean,assessment_mean)),
+            'gameplay_mean':statistics.mean((exploration_mean,assessment_mean)) if steps==assessment_steps else (steps*exploration_mean+assessment_steps*assessment_mean)/(steps+assessment_steps),
             'exploration_return':sum(item['rewards'][0] for item in exploration),
             'assessment_return':sum(item['rewards'][0] for item in assessment),
             'erased_return':sum(item['rewards'][0] for item in erased_assessment),
@@ -144,11 +143,27 @@ def run_meta_trial(rule, teacher_factory, *, seed, steps=12, opponent_profile='s
             'student_final':student.snapshot(), 'opponent_final':opponent.snapshot(),
             'erased_student_final':erased_student.snapshot(),
             'erased_opponent_final':erased_opponent.snapshot(),
-            'phase_steps':{'exploration':steps,'assessment':steps,'erased_assessment':steps},
-            'environment_steps_with_control':3*steps,
+            'phase_steps':{'exploration':steps,'assessment':assessment_steps,'erased_assessment':assessment_steps},
+            'environment_steps_with_control':steps+2*assessment_steps,
             'opponent_nonuniform_action_events':sum(
                 sum(abs(prob-1/tensor.n) for prob in event['opponent_action_probabilities'])>1e-12
                 for event in exploration+assessment),
             'opponent_nonuniform_control_events':sum(
                 sum(abs(prob-1/tensor.n) for prob in event['opponent_action_probabilities'])>1e-12
                 for event in erased_assessment)}
+
+def assess_pair(env, initial, learner, adversary, steps):
+    observations = initial
+    records = []
+    for index in range(steps):
+        # Student always assesses greedily; adversary follows its learning profile.
+        a0 = learner.act(observations[0], epsilon=0.0)
+        opponent_probs = adversary.distribution(observations[1])
+        a1 = adversary.act(observations[1])
+        result = env.step(a0,a1)
+        terminal = index == steps-1
+        learner.update(observations[0],a0,result.rewards[0],result.observations[0],terminal=terminal)
+        adversary.update(observations[1],a1,result.rewards[1],result.observations[1],terminal=terminal)
+        records.append(_event(observations,(a0,a1),result,result.observations,terminal,opponent_probs))
+        observations = result.observations
+    return records

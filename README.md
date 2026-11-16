@@ -108,6 +108,99 @@ G가 커지는 것만으로 절대 성능이 좋아졌다고 해석하지 않는
 PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.meta_exploration --catalog relational --opponent-suite mixed_learning --output-dir runs/my_meta_smoke --seeds 7 --updates 1 --trials-per-update 1 --steps 2 --hidden-size 8 --reps 1
 ```
 
+## 공통 Template와 탐색 경험 비교
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.meta_exploration --catalog probe_template --catalog-seed 20261116 --train-rules 32 --fresh-rules 16 --structural-rules 16 --opponent-suite mixed_learning --seeds 7 17 27 --updates 200 --trials-per-update 32 --steps 12 --assessment-steps 48 --batch-size 32 --device cpu --reps 1 --output-dir runs/my_probe_template
+```
+
+safe/risk/상성/비용의 공통 구조와 숨은 방향θ를 사용한다. 학습·새 파라미터에서는 반복/모방 보너스를
+각각 따로 쓰고,구조 평가는 두 요소의 새 조합이다. 역할 재명명은 독립 구조 다양성으로 세지 않는다.
+규칙 수는 짝수이며 학습 규칙4개 이상에서 두 요소를 포함한다. source·정규화·seed·canonical 분할을 기록한다.
+`information_audit.json`은 고정 상대/알려진 prior의 양성·음성 대조이며 실제 MA 상대의 성공 보장이 아니다.
+실제 학습·평가에서는 상대도 Q/Expected SARSA를 계속 학습한다.
+
+규칙 수를 비교할 때는 하나의 manifest를 공유하고 학습 규칙만 제한한다.
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.meta_exploration --catalog probe_template --manifest runs/my_probe_template/manifest.json --train-rule-limit 8 --opponent-suite mixed_learning --output-dir runs/my_probe_subset8
+```
+
+다른 제한값도 같은 manifest·평가 seed·학습 예산에서 실행한다. `seen_rule`과 실제 학습 ID를 기록한다.
+`--train-rules`로 매번 catalog를 새로 만들면 평가 규칙도 바뀔 수 있으므로 다양성 효과 비교에 사용하지 않는다.
+
+같은 경험을 다른 학생에 제공하거나,같은 학생에서 다른 탐색 경험을 비교한다.
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.history_study --manifest runs/my_probe_template/manifest.json --checkpoint runs/my_probe_template/seed7/policy.pt --initial-checkpoint runs/my_probe_template/seed7/initial.pt --steps 12 --assessment-steps 48 --reps 2 --output-dir runs/my_history_study
+```
+
+원래 full Q 학생의 자연 MA 성능과,같은 참조 상대 상태에서 재생한 조건부 성능을 구분한다.
+세 학생은 정확한 reward/보상 제외/sign 보상 key의 Online Q이며 서로 다른 학습 알고리즘 비교는 아니다.
+History 파일은한벌이며 학생별row는hash/id로 참조한다. full replay는 원학생 snapshot과 일치해야 한다.
+짝 규칙 식별성은 알려진 prior의 연구자 진단이며 신경망 내부의 규칙 분류를 직접 측정하지 않는다.
+`--threshold` 또는 `--reference-low/--reference-high/--threshold-fraction`으로 사전 기준을 지정한다.
+reference high를 최대 달성 가능값으로 자동 가정하지 않는다. 미도달 시간은None/우측검열로 기록한다.
+개별 연구결과의 독립 실행용 도구이며,이 명령 자체가H1의 다양성 효과를 검증하지는 않는다.
+
+## GPU와 Colab 실행
+
+[Colab 노트북](notebooks/MAMRL_GPU.ipynb)을 Colab에서 열고 GPU 런타임을 선택한다.
+노트북은 저장소의 코드를 호출하며 별도 학습 구현을 포함하지 않는다.
+아직 Git에 게시하지 않은 현재 작업본은 루트에서 아래 ZIP을 만들어 노트북에 업로드한다.
+
+```bash
+zip -r /tmp/mamrl-colab.zip 05_toy_models tests requirements-colab.txt -x '*__pycache__*'
+```
+
+GitHub로 가져올 때는 노트북의 `SOURCE_MODE="github"`와 GPU 구현이 포함된 `REVISION`을 명시한다.
+Colab에 기존 CPU 전용 requirements를 설치하면 CUDA PyTorch가 교체될 수 있으므로 사용하지 않는다.
+노트북의 초기 설정은 연결 검사용이며 확대 H1 실험 설정이 아니다.
+
+먼저 **실제로 학습할 WSL 터미널/Colab 런타임**에서 진단한다.
+
+```bash
+PYTHONPATH=05_toy_models .venv/bin/python -m mamrl.diagnose_device --smoke --require-cuda
+```
+
+진단은 PyTorch 빌드/runtime,드라이버 조회,GPU 이름과 실제 CUDA 행렬 연산을 구분해 출력한다.
+GPU가 가능한 기존 환경이면 PyTorch나 CUDA Toolkit을 다시 설치할 필요가 없다. CUDA 지원 PyTorch binary의
+runtime을 사용하되 NVIDIA 드라이버/GPU 접근은 별도로 필요하다. 새 환경 설치는
+[PyTorch 공식 설치 선택기](https://pytorch.org/get-started/locally/)의 CUDA 명령을 따른다.
+기존 `requirements-training.txt`는 CPU 전용 재현용이므로 정상 동작하는 CUDA 환경에 설치하지 않는다.
+에이전트 샌드박스에서는 같은 경로의 Python도 GPU 장치가 차단되거나 다른 빌드로 보일 수 있다.
+이 경우 진단의 `cuda_inaccessible`/`cpu_build`를 구분하고 일반 WSL 터미널에서 다시 확인한다.
+`auto`는 현재 프로세스에서 GPU를 사용할 수 없으면 CPU로 실행하므로 GPU 검증 시 `cuda`를 명시한다.
+
+CUDA PyTorch가 설치된 환경에서는 다음처럼 실행한다.
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m mamrl.meta_exploration --catalog relational --opponent-suite mixed_learning --device cuda --batch-size 32 --updates 40 --trials-per-update 32 --steps 24 --assessment-steps 96 --output-dir runs/my_gpu_run --checkpoint-every 10
+```
+
+`--device cpu`가 기본이며 `auto`는 CUDA 가능 시 GPU를 선택한다. `cuda`를 요청했는데 사용할 수 없으면
+오류를 낸다. `--batch-size`는 병렬 신경망 추론·재생의 trial 수다. 학생/상대 Q-table과 환경은 CPU에서
+독립 실행한다. 배치 크기1은 기존 순차 경로를 유지한다. 환경까지 모두 GPU로 옮긴 구현은 아니다.
+학습·신경망 평가가 배치화되며 GPU 속도 향상은 장치와 batch 크기/환경 비용에 따라 달라진다.
+
+중단 복구는 같은 명령에 `--resume`을 추가한다. `seed*/training_state.pt`는 모델·초기 모델·optimizer·
+sampler/torch 난수·완료 update·이력을 원자적으로 저장한다. `--updates`는 최초부터 최종 목표로 고정한다.
+`--stop-after-update 10`으로 의도적으로 멈췄다면 재개할 때 이 옵션을 제거한다.
+마지막 저장 update 이후의 미저장 작업은 다시 수행한다. trial은 update마다 새로 시작하므로 내부 Q 상태를
+중간에 복구하지 않는다. 설정·원본 source·Python/PyTorch·torch thread·device가 맞지 않으면 재개를 거부한다.
+CPU/GPU 간 weight 추론 파일 이동은 지원하지만 서로 다른 backend의 학습 재개/비트 일치는 보장하지 않는다.
+
+`--backup-dir`에 별도 영구 run 폴더를 주면 checkpoint 저장 경계와 주요 완료 시점에 파일을 복사한다.
+Colab은 VM 로컬 디스크에서 실행하고 Drive에는 이 옵션으로 백업한다. 기존 run이 들어 있는 경로는 새 실행에
+재사용하지 않는다. VM을 잃으면 백업 폴더 전체를 로컬로 복사하고 같은 source/설정으로 `--resume`한다.
+노트북이 이 복원 경로를 제공한다. 학습 전 baseline 평가 중 중단되면 미완료 baseline은 다시 계산한다.
+
+`seed*/timing-*.json`은 호출별 수집/최적화/전체 시간,실제 gameplay step/s와 제어 step 수를 기록한다.
+같은 조건·장치에서 warm-up 후 여러 번 측정해 비교한다. 평가·catalog 생성 시간은 이 학습 처리량에 포함하지 않는다.
+`--steps K --assessment-steps H`로 탐색/후속 길이를 분리한다. H를 생략하면 기존처럼 K와 같다.
+실제 gameplay 비용은K+H,경험 제거 제어까지 K+2H다. 전체 실제 평균 보상은 길이로 가중한다.
+기본 catalog/n3는 유지하며45회 다양성 matrix와 확대 catalog 구성은 후속이다.
+
 ## 기존 생성 게임의 전이 비교
 
 ```bash

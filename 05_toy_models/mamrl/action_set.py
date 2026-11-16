@@ -53,7 +53,7 @@ class ActionSetActorCritic(RecurrentActorCritic):
 
     def initial_hidden(self, *, n: int) -> torch.Tensor:
         n = validate_n(n)
-        return torch.zeros((n, self.hidden_size), dtype=torch.float32, device="cpu")
+        return torch.zeros((n, self.hidden_size), dtype=torch.float32, device=self.device)
 
     def forward_observation(
         self, observation: Observation, hidden: torch.Tensor, *, n: int
@@ -70,16 +70,16 @@ class ActionSetActorCritic(RecurrentActorCritic):
             raise TypeError("hidden must be a torch.Tensor")
         if hidden.shape != (n, self.hidden_size):
             raise ValueError(f"hidden must have shape ({n}, {self.hidden_size})")
-        if hidden.device.type != "cpu" or hidden.dtype != torch.float32:
-            raise ValueError("hidden must be a float32 CPU tensor")
+        if hidden.device != self.device or hidden.dtype != torch.float32:
+            raise ValueError("hidden must match the model device and be float32")
         if not torch.isfinite(hidden).all().item():
             raise ValueError("hidden must be finite")
-        actions = torch.arange(n, device="cpu")
+        actions = torch.arange(n, device=self.device)
         features = torch.stack((
             (actions == own).float(), (actions == opponent).float(),
-            torch.full((n,), math.tanh(reward / 4), dtype=torch.float32),
-            torch.full((n,), float(observation.episode_start_flag), dtype=torch.float32),
-            torch.full((n,), 1 / n, dtype=torch.float32),
+            torch.full((n,), math.tanh(reward / 4), dtype=torch.float32, device=self.device),
+            torch.full((n,), float(observation.episode_start_flag), dtype=torch.float32, device=self.device),
+            torch.full((n,), 1 / n, dtype=torch.float32, device=self.device),
         ), dim=1)
         incoming = torch.zeros_like(hidden) if self.memoryless else hidden
         next_hidden = self.gru(features, incoming)
@@ -89,3 +89,35 @@ class ActionSetActorCritic(RecurrentActorCritic):
                 and torch.isfinite(logits).all().item() and torch.isfinite(value).item()):
             raise ValueError("model output must be finite")
         return logits, value, next_hidden
+
+    def forward_observations(self, observations, hidden, *, n):
+        n = validate_n(n)
+        if not observations:
+            raise ValueError("observations must be nonempty")
+        if not isinstance(hidden, torch.Tensor) or hidden.shape != (len(observations), n, self.hidden_size):
+            raise ValueError("hidden must have shape (batch,n,hidden_size)")
+        if hidden.device != self.device or hidden.dtype != torch.float32:
+            raise ValueError("hidden must match model device and float32 dtype")
+        if not torch.isfinite(hidden).all().item():
+            raise ValueError("hidden must be finite")
+        rows = []
+        for observation in observations:
+            if not isinstance(observation, Observation):
+                raise TypeError("observation must be an Observation")
+            own = validate_action(observation.previous_own_action, n)
+            other = validate_action(observation.previous_opponent_action, n)
+            reward = finite_reward(observation.previous_own_reward)
+            if type(observation.episode_start_flag) is not bool:
+                raise TypeError("episode_start_flag must be bool")
+            rows.append([[float(a == own), float(a == other), math.tanh(reward / 4),
+                          float(observation.episode_start_flag), 1 / n] for a in range(n)])
+        features = torch.tensor(rows, dtype=torch.float32, device=self.device)
+        incoming = torch.zeros_like(hidden) if self.memoryless else hidden
+        out = self.gru(features.reshape(-1, 5), incoming.reshape(-1, self.hidden_size))
+        result = out.reshape(len(observations), n, self.hidden_size)
+        logits = self.actor(result).squeeze(-1)
+        values = self.critic(result.mean(dim=1)).squeeze(-1)
+        if not (torch.isfinite(result).all().item() and torch.isfinite(logits).all().item()
+                and torch.isfinite(values).all().item()):
+            raise ValueError("model output must be finite")
+        return logits, values, result

@@ -67,8 +67,8 @@ def _loss_tensor(value: object, name: str) -> torch.Tensor:
         raise TypeError(f"{name} must be a torch.Tensor")
     if value.ndim != 1 or value.numel() == 0:
         raise ValueError(f"{name} must be a nonempty one-dimensional tensor")
-    if value.device.type != "cpu" or not value.is_floating_point():
-        raise TypeError(f"{name} must be a CPU floating-point tensor")
+    if not value.is_floating_point():
+        raise TypeError(f"{name} must be a floating-point tensor")
     if not torch.isfinite(value).all().item():
         raise ValueError(f"{name} must be finite")
     return value
@@ -84,6 +84,8 @@ def ppo_loss(
     inputs = tuple(_loss_tensor(value, name) for value, name in zip(
         (new_log_probs, old_log_probs, new_values, returns, advantages, entropies), names
     ))
+    if any(item.device != inputs[0].device for item in inputs[1:]):
+        raise ValueError("PPO inputs must be on the same device")
     if any(item.shape != inputs[0].shape for item in inputs[1:]):
         raise ValueError("PPO input tensors must have the same shape")
     new_log_probs, old_log_probs, new_values, returns, advantages, entropies = inputs

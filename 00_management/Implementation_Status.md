@@ -1,53 +1,67 @@
-# Implementation Status — 2026-11-14
+# Implementation Status — 2026-11-17
 
 ## 현재 구현
 
-현재 경로는 관계형 규칙 생성→학습하는 MA 환경→탐색 정책 학습→미학습 평가→HTML 분석까지 연결됐다.
-연구 성공과 실행 경로 완성을 구분한다. 현행 가정은 [Baseline](Project_Baseline.md), 실행법은 [README](../README.md)다.
+[Baseline](Project_Baseline.md)의 탐색→새 MA 과제 적응 목적을 유지한다. 실행법은 [README](../README.md)다.
+학습 상대는 처음부터 유지하며,상대 학습·변화에 대한 적응 자체를 분리 조작하는 실험만 후속이다.
 
-| 부분 | 구현 수준 | 근거 |
-|---|---|---|
-| 환경·정책 경계 | 동시 행동·Memory-One·네 관측·랜덤 초기화·비공개 horizon | [환경 계약](../04_design/Interface_Contract.md) |
-| 규칙 | 의미 관계·상성·조건·보상·예외,28규칙과 중복/PD/최선반응 audit | [관계형 계약](../04_design/Relational_Game_Contract.md) |
-| 학습 | 메타 탐색자→Q 학생·Q/Expected SARSA 상대·후속G→PPO | [메타 계약](../04_design/Meta_Exploration_Contract.md) |
-| 평가 | 초기/학습 탐색과5대조군·동일 예산·가족/미학습 분할 | [최신 실험 검토](sessions/11_relational_rules_review.md) |
-| 결과 확인 | trial 원자료·체크포인트·후속 곡선·prefix AUC·로컬 HTML | README의 메타 탐색 실행 |
+| 부분 | 현재 경로·근거 |
+|---|---|
+| 환경 | 동시 행동·Memory-One·랜덤 초기화·네 관측·비공개 horizon,[환경 계약](../04_design/Interface_Contract.md) |
+| 공통 게임 | safe/risk/marker Template·θ/파라미터/역할 변화·단독 요소와 재조합,[공통 Template 계약](../04_design/Probe_Template_Contract.md) |
+| 폭넓은 생성기 | 기존 관계형28규칙과 legacy 생성기를 비교/재현 경로로 보존 |
+| 메타 학습 | 탐색자→동일Q 학생→Q/Expected SARSA 상대→G/PPO,별도K/H·배치·장치 선택·재개 |
+| 경험 효과 | 동일History×Q표현3종,서로다른탐색×동일학생,자연MA/동일reference상대 조건부 점수 |
+| 평가 | 공통 manifest의 학습 prefix 제한·고정 평가/seed,연구자θ식별성·검열을 포함한threshold 기능 |
 
-## 최신 연구 결과
+## 최신 개발 실행
 
-관계형 v2의3seed×40update 실행을 완료했다. 새 규칙에서 학습 탐색은 초기/랜덤보다 낮았고,
-예외 구조에서는 안정된 우위를 확인하지 못했다. 새 상대 설정에서는 절대 성능이 상승했지만
-학생 경험 유지G는 초기보다 소폭 낮았다. 더 유용한 경험을 학습했다는 결론은 미확정이다.
-정확한 수치·조건·한계는 [결과 검토 한 곳](sessions/11_relational_rules_review.md)에 둔다.
-로컬 원자료는 `runs/meta_relational_v2/`에 있으며 공유 사본 없이 동료가 독립 실행한다.
+`runs/probe_template_dev_20261116/`:32학습/16새파라미터/16요소재조합,3seeds7/17/27,
+200updates×32trials,K12/H48,H32,batch32,CPU1thread,reps1을 실제 실행했다.
+실제384,000+제어307,200 steps/seed,3seed 총2,073,600(평가 별도),기존 실제 예산의50배다.
+새 최종 평가를 사용하지 않은 개발 실행이며,규칙 다양성 수준 간 H1 비교는 아직 아니다.
+
+| 후속 평가 | 초기 | 학습 탐색 | 랜덤 | ε-greedy |
+|---|---:|---:|---:|---:|
+| 새 파라미터 | .270037 | .271545 | .268849 | .245894 |
+| 요소 재조합 | .267712 | .310767 | .284088 | .309214 |
+| 새 상대 설정 | .317521 | .287267 | .292094 | .328400 |
+
+재조합은 초기/랜덤 대비3seed 모두 양수지만 ε-greedy와 비슷했다. 새 파라미터는 차이가 작고 seed별 부호가 섞였고,
+새 상대 설정은 초기 대비3seed 모두 하락했다. 보편적인 탐색 우위나H1/H2 성공은 확인하지 못했다.
+θ짝32/32의 단계별 최선반응은 다르지만 temporal 보너스를 추가해 최선반응이 달라진 규칙은0/64였다.
+재조합을 새로운 전략 구조로 부르지 않는다. 보너스 합계 .15→최대 .30과 정규화의 교란도 남는다.
+
+## History 효과와 학생 활용
+
+각 seed의 `history_seed*/report.html`은 같은 fresh 32 tasks/reps1/평가 seed에서 세 훈련 checkpoint를 paired 비교한다.
+random-reference 상대에서 full Q의 learned-history 평균은 .243832, initial .251839, random .268849였다.
+이 reference는 random-history에는 자연 쌍, learned에는 교차 쌍이므로 순수 경험 품질 순위로 단정하지 않는다.
+같은 random-history를 제공한 학생 점수는 full .268849, 보상 제외/sign 표현 각각 .304245였다.
+이는 Q 표현 비교이며 다른 학습 알고리즘의 성공이나 학생 기본값 변경의 근거는 아니다.
+θ 짝 식별성은 random 100%, learned 87.5%였지만 알려진 prior의 연구자 reward-consistency 진단이며
+정책 내부 규칙 분류를 보여주지 않는다. threshold는 이번 실행에서 지정하지 않았다.
+고정 상대 zero-bonus 양성 대조의 정보 가치 .9는 정확 계산했지만 실제 학습 상대/보너스 조건에 자동 상속하지 않는다.
 
 ## 검증
 
-리팩터링 후 전체143 tests,46.779s,OK; Torch 없는 Python143 tests,3.109s,OK(skipped=55).
-독립 validator의9개 저장 계약 검증을 포함한다. v2 checkpoint24회는 전체 결과가 정확히 일치했고,
-v1의24회도 기존 필드 값이 일치했다(v2에서 추가한 알고리즘/prefix/기울기 metadata는 별도).
-정리 전 source와2update 학습의 이력·최종 가중치도 정확히 일치했다.
-기존 실험의1496 trial 검증은 해당 실행 폴더,이번 증거는 `runs/refactor_verification_20261114/verification.json`에 있다.
-브라우저 시각 검수는 미실행이다.
+실제 GPU를 포함한 전체 168 tests,91.578s,OK(skip 없음). Torch 없는 Python 168 tests,3.508s,OK(skipped=66).
+독립 validator의 11개 계약 검증과 research_critic의 설계/결과 검토를 반영했다.
+6 checkpoint×4집합의 24회 전체 평가 재현,1,920 평가 trial 비용/clone/업데이트 audit,
+History 전체 hash/동일 상대/업데이트 수,seed7 전체 row 재생성,source snapshot/HTML 일치를 확인했다.
+증거는 실행 폴더의 `verification.json`과 `strategy_audit.json`이다. Colab/브라우저 자체 실행은 미검증이다.
 
 ## 다음 작업
 
-1. 새 튜닝 전, 학생이 얻은 경험과 탐색이 만든 상대 상태의 효과를 분리할 비교를 설계한다.
-   초기/학습 상태의2×2 교차 평가는 후보이며 아직 실행하지 않았다.
-2. 생성 seed·학생·상대·예산 확장을 사전 계약하고 노출량·유인 구조·정보 가치를 구분한다.
-   작은 진단의 성공을 확장 연구의 필수 관문으로 두지 않는다.
-3. 목적함수 변경·self-play·population·게임 내 규칙 전환은 별도 결정한다.
+1. reference상대를random/initial/learned로교차해History순위의민감도를확인한다. 조건부진단을인과증거로확대하지않는다.
+2. 개발집합에서학생/탐색자/목표를제한비교후고정한다. 실제규칙추론은연구자후보검사와분리한다.
+3. 공통manifest·다중catalog·고정총예산/규칙당노출대조로H1을실행한다. 규칙수와전략차이를분리하고최종평가를봉인한다.
+4. 총보너스/정규화/정보난도대조를추가한뒤재조합H2와상대변화적응분석을확장한다. 작은성공을상시관문으로삼지않는다.
 
-## 정리 (2026-11-14)
+## 실행 기반과 과거 근거
 
-현재 문서에서 과거 지시·중복 수치를 제거하고,공통 규칙 metric과 리포트/아티팩트 저장 책임을 분리했다.
-새 실행은 상세 평가를 한 번 저장하고 요약 집계에서 hash가 있는 참조로 읽는다. 기존 실행 파일은 보존한다.
-같은 v2 자료의 집계 파일은185,120,204→1,260,467 bytes이며,상세 복원과 HTML 재생성이 일치했다.
-기존 실행은 소급 압축/삭제하지 않았다. 보관 문서는 과거 근거로만 읽고 현재 문서를 다시 누적하지 않는다.
-
-## 과거 근거
-
-[전체 구현 이력](archive/Implementation_Status.md)은 정리 전 기록이며 현재 작업 지시가 아니다.
-[첫 전이 실험](sessions/09_generated_transfer_review.md), [메타 v1](sessions/10_meta_exploration_review.md),
-[메타 v2](sessions/11_relational_rules_review.md)를 개별 근거로 사용한다.
-고정 상대·기존 생성기·학습 진단 CLI와 체크포인트는 비교/재현 경로로 유지한다.
+실호스트RTX5060Laptop8GB·기존torch2.15+cu132/runtime13.2를사용한다. 제한된프로세스의GPU차단은
+장치부재와구별한다. 작은H32는CPU가빨랐고,H256/batch256측정에서CUDA가약1.23배빨랐다.
+[GPU 측정](../runs/gpu_runtime_check_20261116/verification.json),[메타 계약](../04_design/Meta_Exploration_Contract.md)을따른다.
+[이전전체이력](archive/Implementation_Status.md),[v1](sessions/10_meta_exploration_review.md),
+[관계형v2](sessions/11_relational_rules_review.md)는당시근거이며현재지시가아니다.

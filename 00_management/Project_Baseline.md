@@ -18,10 +18,12 @@ H1/H2의 다양성·재사용 구조는 이 효과를 분석하는 축이다. se
 - 논리 명세 생성→결정적 Compiler→고정 보상 텐서. 임의 tensor cell을 직접 샘플링하지 않는다.
 - 현재 경로는 `mamrl.meta_exploration --catalog relational --opponent-suite mixed_learning`이다(D-024).
   인자 생략 시 과거 logical/Q 기본값을 유지한다. 실행법은 [README](../README.md)를 따른다.
+  메타 실행은 cpu/cuda/auto와 trial 배치·update 재개를 지원한다(D-026). 환경/Q는CPU이며 장치 선택은 관측을 바꾸지 않는다.
 - 관계형28규칙은12학습/8새규칙/8예외구조. 상성·관계·조건·보상·예외를 분리하고 현재 행동 일치를 강제하지 않는다.
   원식/정규화/seed/중복·재명명/PD·최선반응 audit를 기록한다. 이름·텐서 거리가 전략 다양성을 보장하지 않는다.
 - action_set_v1 탐색자(H32)가12턴 경험을 수집하고 같은 온라인 Q 학생(alpha=.5,gamma=.95)이 학습한다.
   학생은 새 episode에서12턴 greedy로 플레이하며 계속 학습한다.
+  기본K=H12를 유지하며 `--assessment-steps H`로 후속 길이를 별도 지정할 수 있다(D-027).
 - 상대는 자기 보상으로 Q(.3,.15) 또는 Expected SARSA(.5,.2)를 학습한다(gamma=.95).
   heldout은 이미 훈련한 Expected SARSA의 새 설정(.7,.1)이다. 미사용 알고리즘 전이가 아니다.
 - 학생/상대는 trial 시작에 초기화하고 episode 사이에는 유지한다. 탐색자 가중치는 inner trial/최종 평가에서 고정한다.
@@ -29,6 +31,13 @@ H1/H2의 다양성·재사용 구조는 이 효과를 분석하는 축이다. se
 - 메타G=후속 평균−경험 제거 평균으로 탐색자 PPO를 학습한다. 탐색 중 보상을 더하지 않는다.
   G는 조건부 경험 유지 효과이며 순수 정보량·절대 성능 개선이 아니다. 절대 성능과 함께 판단한다.
 - 현재 파일럿은3seeds×40updates×8trials,H32,reps2. heldout으로 checkpoint 선택/튜닝하지 않는다.
+
+현재 실행과 별개로 [2026-11-16 확대 계획](../04_design/Relational_Game_Contract.md#2026-11-16-연구-확대-계획--미구현-v2-실행-계약과-구별)을 채택했다.
+후속 수치/모델/학생/목표는 개발 검증 후 실행 전에 확정하며 위 v2를 소급 변경하지 않는다.
+
+D-028의 [공통 Template/History 비교](../04_design/Probe_Template_Contract.md)를 추가했다.
+학습 상대는 계속 유지하고 상대 학습·변화에 대한 적응 자체의 분리 검증만 후속으로 둔다.
+`probe_template`는 구조가 유사한 게임과 기존 요소 재조합을 구분하는 개발 경로이며 기존 v2를 대체하지 않는다.
 
 ## 문서의 역할
 

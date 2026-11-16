@@ -131,3 +131,34 @@ Expected SARSA 통합·메타 실험·리포트와 최종 검증을 수행했다
 사용자의 규모/파악 비용 지적에 따라 현재 기준과 과거 근거를 분리하고 사실별 기록처를 정했다.
 공통 규칙 metric·HTML·저장 책임을 분리했으며 상세 평가 중복을 참조 저장으로 바꿨다.
 연구 조건은 유지했다. 변경·실제 검증은 [Implementation Status](Implementation_Status.md)에 기록한다.
+
+## 2026-11-16 — 외부 비판 보고서와 본격 실험 확대 계획
+
+전달 보고서의 첫번째 구현을 본 저장소로 두고 현 코드/원자료와 대조했다. 학생 key/이력 활용,
+정보가치·예산·개발/최종 분리 비판을 수용하되 학습상대 후순위·작은 성공 필수관문은 채택하지 않았다.
+독립 research_critic과 DREAM/Xu2018/통계평가 원문을 검토했다. 기존408개 trained 평가의 key 재사용을
+재분석했으며 새 학습/성능 실험은 하지 않았다. 수치·해석·계산량·규모 목표는 관계형 계약의2026-11-16절에
+한 번 기록했고 현행 진행을 갱신했다(D-025). 보고서 원문과 v2 실험 근거는 보존했다.
+
+## 2026-11-16 — GPU/Colab 실행 경로 구현
+
+사용자의 구현 요청에 따라 D-026의 장치 선택·배치추론/PPO·update 경계 재개·Colab/Drive 경로를 구현했다.
+worker는 모델/device/portable checkpoint,validator는 독립 배치/재개/CLI 복원 검증,메인은 수집/학습/통합을 담당했다.
+연구 보상/관측/G와 CPU 환경/Q 학습은 유지했다. 실제 검증과 작은 CPU 처리량은 Implementation Status,
+GPU/Colab 미실행 한계와 실행법은 README에 기록했다. 확대H1 실험 자체를 수행한 것은 아니다.
+
+## 2026-11-16 — 실제 호스트 CUDA 확인과 독립 K/H 연결
+
+GPU 접근이 차단된 샌드박스의 결과를 호스트 하드웨어 부재와 구별했다. 읽기 전용 호스트 조회와
+CUDA 연산으로 기존 PyTorch runtime 사용을 확인했으며 추가 설치/드라이버 변경은 하지 않았다.
+D-027로 실행범위 진단·수집 배치 전송·별도 후속H를 구현하고,독립 validator가 실제GPU parity/재개와
+비대칭 horizon을 검증했다. 작은 모델의 GPU 손해와 큰 모델의 이득을 함께 Implementation Status에 기록했다.
+확대 catalog/matrix와 본격 H1 실행은 여전히 후속이며,Colab 자체는 실행하지 않았다.
+
+## 2026-11-16~17 — 공통 Template와 History/학생 비교 구현
+
+사용자메모와'상대학습적응후속'정정을반영해학습상대를유지한D-028을구현했다. 독립critic이θ재명명동등성을
+지적해marker비용을넣었고,worker는template/정확VoI,validator는계약/CLI검증,메인은학습/History/manifest통합을맡았다.
+32/16/16규칙·3seed200update개발실행과History3checkpoint비교를수행했다. 재조합개선과새상대하락,
+reference비대칭/학생표현/전략구조의해석한계를분리했다. 결과와검증은Implementation Status,조건은Probe_Template_Contract에둔다.
+과거source snapshot을보존하고별도새현재manifest주입기능을검증했다. H1/H2확증이나정책내부규칙식별을주장하지않는다.

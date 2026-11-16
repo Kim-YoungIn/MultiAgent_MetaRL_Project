@@ -124,3 +124,46 @@ it also accepts historical embedded v1/v2 records. The runner still returns the 
 and the historical `meta_exploration.render_meta_report` import remains supported.
 Existing run files/source snapshots are not migrated. Reference files are the authoritative details;
 archive/move the complete run directory. This storage change is not a new research protocol.
+
+## GPU/Colab execution (2026-11-16; D-026)
+
+The execution backend may be cpu/cuda/auto,with explicit CUDA failure when unavailable.
+Action-set inference and full-sequence PPO replay batch independent trials. CPU games/Q learners
+keep local RNG/tables; the shared coroutine preserves simultaneous actions and paired erasure.
+No changes to observations,reward,inner learning/episode boundaries or the G objective are adopted.
+Batch size1/CPU is the compatibility path. Numerical/repeated-run checks,not cross-device bitwise
+identity,are the CUDA contract. Portable inference checkpoints serialize CPU weights.
+
+Training restart is at completed update boundaries: atomic model/initial/Adam/sampler/torch RNG,
+full history and config+catalog+suite+resolved-device digest. Same-target config and software/source
+are required; changing batch size or device requires a new experiment. New and resumed work use
+identical trial-local seeds. A failed/incomplete update is repeated from the last saved boundary.
+CLI --resume keeps exclusive completed artifacts and regenerates missing final reports.
+
+Optional run mirroring copies published artifacts and restart states to a separate persistent folder.
+Backups exclude .tmp files; a multi-file mirror interrupted in flight may need regeneration from the
+last valid checkpoint. Source/protocol/catalog travel with the run. Colab notebook uses local working
+storage and a Drive mirror; GPU availability/runtime/version changes remain external constraints.
+The CPU install pins remain for legacy local use; Colab keeps its CUDA torch and records actual versions.
+
+Timing reports collection (teacher inference+CPU environment/student/control) and optimization separately,
+with device synchronization on CUDA. Wall time includes checkpoint/mirror overhead but excludes final
+evaluation and catalog/baseline setup. These are throughput diagnostics,not research score comparisons.
+Current runner retains fixed catalog/n3; expanded H1 is not executed.
+
+## Independent phase lengths and runtime checks (2026-11-16; D-027)
+
+--steps K and optional --assessment-steps H separate exploration from assessment/control. H defaults
+to K for compatibility. The final exploration update still bootstraps from the next episode reset;
+assessment/control bootstrap0 at H. Both agents make K+H updates in the retained branch.
+Charge gameplay K+H and simulation K+2H. G remains assessment mean minus erased mean.
+Total gameplay mean and opponent nonuniform action fractions weight actual event counts.
+Protocol/checkpoint contexts/CLI/report/Colab all carry H; changed H rejects resume. This enables
+longer-budget studies but does not itself execute/adopt a new H1 protocol.
+
+`mamrl.diagnose_device --smoke --require-cuda` distinguishes CPU binary,installed runtime with
+blocked driver access,and successful GPU computation. Diagnosis must run in the training process
+context; a restricted agent result is not evidence of missing host hardware. Use the CUDA runtime
+shipped with PyTorch; no Toolkit reinstall is needed for existing supported binary operations.
+Batch collection transfers sampled actions/behavior statistics once per batch while retaining
+per-trial sampling generators. CPU/CUDA small and larger-load throughput must be reported separately.

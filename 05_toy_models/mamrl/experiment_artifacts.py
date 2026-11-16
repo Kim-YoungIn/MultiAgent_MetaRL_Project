@@ -66,9 +66,8 @@ def save_meta_experiment(path, record):
                  'baselines': _baseline_summary(record['baselines']),
                  'runs': [_run_summary(run) for run in record['runs']],
                  'references': references}
-    with path.open('x', encoding='utf-8') as stream:
-        json.dump(aggregate, stream, ensure_ascii=False, indent=2, allow_nan=False)
-        stream.write('\n')
+    from .run_files import write_json_exclusive
+    write_json_exclusive(path, aggregate)
 
 
 def load_meta_experiment(path):

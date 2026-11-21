@@ -1,0 +1,26 @@
+[
+  {
+    "workers": 1,
+    "workloads": 8,
+    "seconds": 10.300266220001504,
+    "workloads_per_minute": 46.60073727685943
+  },
+  {
+    "workers": 4,
+    "workloads": 8,
+    "seconds": 3.8249871840016567,
+    "workloads_per_minute": 125.49061654576046
+  },
+  {
+    "workers": 6,
+    "workloads": 8,
+    "seconds": 3.2681097620006767,
+    "workloads_per_minute": 146.87389193016358
+  },
+  {
+    "workers": 8,
+    "workloads": 8,
+    "seconds": 2.849297515997023,
+    "workloads_per_minute": 168.46257623329973
+  }
+]

@@ -6,6 +6,8 @@ Research repository for investigating **how meta-learning affects agents' adapta
 
 ## Completed adaptation experiments
 
+**Fast Exploration at 24 independent blocks.** The scaled Teacher–Student protocol compares learned, belief-blind, random and greedy exploration with K=0/4/8/16/24 and 32 assessment turns. The runnable entry point, benchmarks and artifact indexes are in the [scaled study guide](research/fast_exploration_v1/README.md).
+
 **Absolute reward after exploration.** On 6,144 new structured games the cumulative-return opening beat both a gain-only target and an immediate-reward target. Its advantage in choosing a more useful numerical reward signal was unresolved when the game and opponent state were restored. [Study and reproduction](research/absolute_exploration/REPORT.md)
 
 **Rule similarity and adaptation.** Compare nearest training-game similarity with paired adaptation gains in D-031 and in 3,072 structured test games. The historical full-budget continuation and its offline source restoration are tracked separately. [Similarity report](research/rule_similarity/REPORT.md) · [D-031 continuation](research/d031_completion/README.md)

@@ -1,0 +1,56 @@
+{
+  "protocol": "fast-exploration-scale-v1",
+  "split": "final",
+  "config": {
+    "blocks": 24,
+    "blocks_per_master": 8,
+    "test_games": 128,
+    "prior_games": 128,
+    "teacher_updates": 400,
+    "batch": 32,
+    "prior_steps": 160,
+    "test_resets": 2,
+    "ks": [
+      0,
+      4,
+      8,
+      16,
+      24
+    ],
+    "h": 32
+  },
+  "master_seeds": [
+    7311903,
+    8291309,
+    9416819
+  ],
+  "device": "cpu",
+  "sampling": "cpu",
+  "python": "3.14.4",
+  "torch": "2.14.1+cu130",
+  "numpy": "2.5.4",
+  "cuda_runtime": "13.0",
+  "gpu_name": null,
+  "source": {
+    "05_toy_models/mamrl/adaptive_agents.py": "ec334ff5a39bd32701a9cd36aef48844715cef0a7ce39e772662ad04b4920848",
+    "05_toy_models/mamrl/common.py": "8e7a60714b77b947814a50f94a84451531495ed540644e79a16d39536e2fa9c8",
+    "05_toy_models/mamrl/environment.py": "2d95f75febea6a526d67c86c13d4cd81c86fb8842572cc78ef60c0030ce7311f",
+    "05_toy_models/mamrl/rules.py": "5ae5e96536d2f18e2b34eb1aae14c3283aff4cec9519379c2174606c1fc74127",
+    "05_toy_models/mamrl/structured_games.py": "8230f0370c32bb9ed7869b6d06d9d1d3c3af9595a9c611f9c7515ae598f19666",
+    "05_toy_models/mamrl/tensor.py": "884240d855e26e9c155c86b7bdd54f6254dad0944c24eb300cb42c0083abb353",
+    "experiment/artifacts.py": "2119428804016410ad122835bca6cc53795b370f4e847be566a81ff414008953",
+    "research/fast_exploration_v1/PROTOCOL.md": "d0500bf1fd5e307d644ddfa42e37a5b679fac004608fd912674e0900a2260329",
+    "research/fast_exploration_v1/SCALE_PROTOCOL.md": "aa4f4aa12784bed6ced0810a30f64fb2cb8eda2939ae7299ab83b2772e1fe78f",
+    "research/fast_exploration_v1/batch.py": "34cad7367b1eb5c68a9560facfdaf45175d8da2ea105502bb7e5345578b665a6",
+    "research/fast_exploration_v1/figure.py": "0f8ae03babd76bfb78a534bde3c2218a44dc2745c9746dd3f4545a1dab03a273",
+    "research/fast_exploration_v1/prior.py": "a4bef1c8fba3eba3db3af501592633ccaa87839041480be4854f506a29a6a8c1",
+    "research/fast_exploration_v1/report.py": "49bc744ac602e67f9a1d79355619cd7f21259393b4ca2881e5e980b07fefefa3",
+    "research/fast_exploration_v1/scale.py": "9838baa5be9689e9198f8f7a6d7b6c87ac5ea68a9d8e40c6d19b57e26d7282f2",
+    "research/fast_exploration_v1/simulator.py": "021158b0bc86ec4d415da7c23059186de92009f0d0273136605603b07ae5c0c0",
+    "research/fast_exploration_v1/study.py": "1c75a178232b94a51497f86920f9125a0c34393fb0703dc400293ac0d2bedb0e",
+    "research/opponent_adaptation/data.py": "cd0e31b1b62739421bfa67dfc428be16e91014f713a76b0c88fe292832b65f16",
+    "research/opponent_adaptation/study.py": "7ea3a1dfd97132f72fae791fb19679ef8a342c91669d9483c814d9940e98981c",
+    "research/structured_oracle/run.py": "86568ab8dfe0587ff81f43098361833ac16fe6ec7df655bb53a972ffa05c79aa",
+    "research/structured_scale/run.py": "9c58b043f66bd627fcd052dd4575edff7f300b9c9f5e5fddf44e4b4fe889fa5b"
+  }
+}

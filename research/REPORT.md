@@ -1,5 +1,7 @@
 # When does experience in a new game improve the next decision?
 
+**Absolute reward after exploration.** On 6,144 new structured games the cumulative-return opening beat both a gain-only target and an immediate-reward target. Its advantage in choosing a more useful numerical reward signal was unresolved when the game and opponent state were restored. [Study and reproduction](absolute_exploration/REPORT.md)
+
 The follow-up studies relate rule similarity to measured adaptation and resume the full D-031 budget from its sealed archive. The original exploratory reward-stakes protocol has also been executed and verified. [Similarity results and reproduction](rule_similarity/REPORT.md) · [D-031 continuation](d031_completion/README.md) · [Reward-stakes experiment](probe_stakes/REPORT.md)
 
 **Direct test of the central question.** A subsequent study crossed focal meta-training versus ordinary pretraining with counterpart learning enabled versus disabled. On 3,072 new structured games, eight observations improved both agents. Their payoff difference against a learning counterpart was −0.00015 [−0.00312, +0.00271], and changing counterpart learning produced an unresolved three-way interaction of +0.00013 [−0.00390, +0.00423]. These 97.5% intervals account for the two primary comparisons. A separate planning study found a small two-turn planning benefit and an unresolved reward-information mechanism. [Matched meta-training and counterpart-learning study](opponent_adaptation/REPORT.md) · [Two-turn planning study](active_probe/REPORT.md)

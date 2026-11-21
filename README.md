@@ -6,6 +6,8 @@ Research repository for investigating **how meta-learning affects agents' adapta
 
 ## Completed adaptation experiments
 
+**Absolute reward after exploration.** On 6,144 new structured games the cumulative-return opening beat both a gain-only target and an immediate-reward target. Its advantage in choosing a more useful numerical reward signal was unresolved when the game and opponent state were restored. [Study and reproduction](research/absolute_exploration/REPORT.md)
+
 **Rule similarity and adaptation.** Compare nearest training-game similarity with paired adaptation gains in D-031 and in 3,072 structured test games. The historical full-budget continuation and its offline source restoration are tracked separately. [Similarity report](research/rule_similarity/REPORT.md) · [D-031 continuation](research/d031_completion/README.md)
 
 **Direct comparison against a learning counterpart.** Across 3,072 fresh structured games, updating from eight interactions raised payoff for both the meta-trained and conventionally pretrained agents. Their absolute difference against the updating opponent was −0.00015, with a 97.5% interval of [−0.00312, +0.00271]. The paired test also found no resolved change in their relative update benefit when the counterpart's own learning was enabled. Ordinary pretraining yielded higher descriptive 24-turn deployment return. [Research report, data and reproduction](research/opponent_adaptation/REPORT.md)

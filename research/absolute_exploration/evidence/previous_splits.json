@@ -1,0 +1,22 @@
+{
+  "final": 36864,
+  "prior_counts": {
+    "active_probe_v1": 22528,
+    "probe_stakes_v1": 4096,
+    "opponent_adaptation_v1": 6144,
+    "absolute_exploration_dev": 208,
+    "structured_transfer_v1": 1536,
+    "structured_scale_v1": 1664,
+    "structured_oracle_v1": 576
+  },
+  "prior_union": 36752,
+  "overlap_by_panel": {
+    "active_probe_v1": 0,
+    "probe_stakes_v1": 0,
+    "opponent_adaptation_v1": 0,
+    "absolute_exploration_dev": 0,
+    "structured_transfer_v1": 0,
+    "structured_scale_v1": 0,
+    "structured_oracle_v1": 0
+  }
+}

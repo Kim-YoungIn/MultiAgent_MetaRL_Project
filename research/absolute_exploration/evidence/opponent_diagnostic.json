@@ -1,0 +1,24 @@
+{
+  "methods": [
+    "return",
+    "myopic"
+  ],
+  "means": {
+    "live_terminal": [
+      0.02262609379460467,
+      0.007477061903953614
+    ],
+    "live_terminal_if_opening_q_frozen": [
+      0.02252814154201593,
+      0.007425425703446126
+    ],
+    "opening_opponent_q_update": [
+      0.0289003554589673,
+      0.028790699576500867
+    ],
+    "rewind_terminal_visible": [
+      0.03006091780439722,
+      0.030393679301741222
+    ]
+  }
+}

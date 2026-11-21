@@ -1,0 +1,24 @@
+{
+  "split": "final",
+  "blocks": 24,
+  "primary": [
+    {
+      "name": "live_return_minus_gain",
+      "estimate": 0.024760858885902393,
+      "lower": 0.020429124979144665,
+      "upper": 0.028738805440920355
+    },
+    {
+      "name": "live_return_minus_myopic",
+      "estimate": 0.006380182960925622,
+      "lower": 0.0030753122038816873,
+      "upper": 0.009584895895275256
+    },
+    {
+      "name": "rewind_feedback_return_minus_myopic",
+      "estimate": 2.616141853282044e-05,
+      "lower": -0.0016126244218494594,
+      "upper": 0.0017446686534121798
+    }
+  ]
+}

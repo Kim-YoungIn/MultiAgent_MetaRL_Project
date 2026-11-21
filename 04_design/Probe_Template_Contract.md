@@ -76,8 +76,42 @@ CLI→checkpoint 재평가→History study와HTML을 독립 검증한다.
 재조합을 새로운 전략 구조로 부르지 않는다. 단독총보너스.15와조합최대.30의 규모/정규화 교란이 남는다.
 
 조건부 reference가random인 기본평가에서 random history는자연쌍,learned history는교차쌍이다.
-성능 차이를 순수history품질 인과순위로 단정하지 않는다. reference=random/initial/learned 교차는후속후보다.
+성능 차이를 순수history품질 인과순위로 단정하지 않는다. reference=random/initial/learned 교차는 아래 D-029로 구현했다.
 세학습checkpoint의History비교는같은evaluation seed/과제/reps1을사용한paired비교다.
 반복된random점수를세독립환경seed로세지않는다. θ후보진단은knownpaired reward-consistency일뿐
 상대행동likelihood를활용한전체규칙추론/신경망belief검사가아니다.
 threshold기능은있지만이번실행에서는None이므로적응도달시간개선을관찰했다고보고하지않는다.
+
+## D-029 — 목표와 상대 상태를 분리하는 개발 비교
+
+외부 비평의 G/절대 성능 불일치와 reference 비대칭을 별도 조작으로 검토한다.
+`mamrl.objective_study`는 같은 manifest·초기 신경망 seed·task sampler·학생·학습 상대·예산에서
+G(`retained_gain`)와 후속 평균(`assessment_return`)으로 각각 PPO를 학습한다.
+어느 목표에도 탐색 중 즉시보상을 더하지 않는다. 절대 목표에서도 경험 제거 대조를 계산해 계산량을 맞춘다.
+기본 CLI 목표는 G를 유지하며,목표 변경 시 optimizer 재개를 거부한다.
+
+개발 실행은 기존32/16/16 manifest·seeds7/17/27·200updates×32trials·K12/H48·H32·batch32·CPU1thread다.
+0/50/100/200update의 공통 평가를 남기고 최종200을 비교한다. 평가 최고점 선택/추가 튜닝은 하지 않는다.
+6회 훈련 총4,147,200 simulation steps이며 중간/최종 평가 비용은 별도다.
+후속 평균·G·전체 K+H 평균을 함께 보고,θ/상대/보상 부호/직전 행동 일치/초기·후기별 반복 횟수도 남긴다.
+조건부 빈도에는 상태 방문 차이가 있으므로 같은 관측에서의 인과적인 정책 차이로 해석하지 않는다.
+신규 평가 trajectory를 중복 저장하지 않고 task별 지표·가중치·훈련 이력·source hash를 보존한다.
+`--resume`은 동일 protocol/source에서 update 경계 상태를 재개한다. 이전 평가 누락은 임의 재생성하지 않는다.
+
+`mamrl.reference_study`는 각 과제에서 random/initial/learned가 만든 학생 History와
+각 탐색이 만든 상대의 table/RNG 상태를3×3으로 교차한다. 모든 조건에서 같은 reset을 사용하고
+학생 재생 snapshot을 검사하며 online 대각선은 원래 자연 MA 평가와 정확히 일치해야 한다.
+각 조합은 학생 online/frozen 두 방식으로 평가한다. frozen은 학생 Q만 갱신하지 않으며
+동률 행동 RNG는 진행하고 상대는 자기 보상으로 계속 학습한다. 순수 정보량/고정 상대 실험은 아니다.
+K12/H48에서는 과제당3(K+2H)+18H=1,188 simulation steps다.
+fresh32과제×기존3checkpoint는114,048steps이며 같은 평가 난수를 공유하는 paired 비교다.
+
+확대는 이 개발 비교와 병행 가능한 다음 본실험으로 이어간다. 단순 update 증량보다
+독립 catalog·학습 seed·평가 반복을 분리하고,규칙수와 전략 차이·규칙당 노출을 통제한다.
+우선 고정된 학생/목표로 소수 조건의 다중catalog 실행을 수행하고 그 처리량/학습곡선으로
+8/32/128×3catalog×5seed 계획의 예산을 확정한다. 개발 성공을 모든 후속 작업의 상시 관문으로 삼지 않는다.
+Bayes 양성 대조와 실제 Q의 연결,총보너스/정규화 교란,전략적 다양성의 정의는 여전히 미해결이다.
+
+후속 실행의 우선순위는 사용자 행동 공간·규칙 다양성 확대 요청에 따른
+[D-030](Relational_Game_Contract.md#d-030--행동-공간과-생성-구조-확대-및-이번-주-설계-마감-2026-11-18)이 갱신한다.
+기존 probe는 분석·회귀용으로 유지하고 가변 크기 관계형 분포와 n3/4/5 학습·전이 비교를 진행한다.

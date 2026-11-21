@@ -504,3 +504,113 @@ PYTHONPATH=05_toy_models python3 -B -m mamrl --n 3 --steps 32 --seed 7 --family 
 5. 최소 체류 길이 이후 확률적 규칙 변경은 보류했으며 episode 중 scheduler는 구현하지 않았다.
 
 원본·외부 생각 노트·Codex 설정은 수정하지 않았다. Git commit은 만들지 않았다.
+
+
+## 2026-11-18 — D-029 결과와 D-030 이전 상태
+
+# Implementation Status — 2026-11-18
+
+## 현재 구현
+
+[Baseline](../Project_Baseline.md)의 탐색→새 MA 과제 적응 목적을 유지한다. 실행법은 [README](../../README.md)다.
+학습 상대는 처음부터 유지하며,상대 학습·변화에 대한 적응 자체를 분리 조작하는 실험만 후속이다.
+
+| 부분 | 현재 경로·근거 |
+|---|---|
+| 환경 | 동시 행동·Memory-One·랜덤 초기화·네 관측·비공개 horizon,[환경 계약](../../04_design/Interface_Contract.md) |
+| 공통 게임 | safe/risk/marker Template·θ/파라미터/역할 변화·단독 요소와 재조합,[공통 Template 계약](../../04_design/Probe_Template_Contract.md) |
+| 폭넓은 생성기 | 기존 관계형28규칙과 legacy 생성기를 비교/재현 경로로 보존 |
+| 메타 학습 | 탐색자→동일Q 학생→Q/Expected SARSA 상대→G/절대 후속목표 PPO 비교,별도K/H·배치·장치 선택·재개 |
+| 경험 효과 | 동일History×Q표현3종,서로다른탐색×동일학생,자연MA/동일reference상대 조건부 점수 |
+| 평가 | 공통 manifest의 학습 prefix 제한·고정 평가/seed,연구자θ식별성·검열을 포함한threshold 기능 |
+
+## 최신 개발 비교 — D-029
+
+외부 비평과 runs 분석을 검토하고 기본G는 유지한 채 목표함수 대조와 상대 상태 교차를 구현했다.
+`runs/objective_control_dev_20261118/`: 기존과 같은32/16/16 manifest·학생·학습 상대·3seeds·K12/H48,
+두 목표별200updates×32trials,H32,batch32,CPU1thread,reps1이다. 6회 훈련 총4,147,200 simulation steps(평가 별도).
+0/50/100/200을 평가했고 최종200으로 비교했다. G 경로는 기존 결과를 재현했다.
+
+| 최종 후속 평균 | G 목표 | 절대 후속보상 목표 | 절대−G seed별 부호 |
+|---|---:|---:|---|
+| 학습 규칙 | .279339 | .290085 | + / + / + |
+| 새 파라미터 | .271545 | .264983 | + / − / − |
+| 요소 재조합 | .310767 | .281454 | − / − / − |
+| 새 상대 설정 | .287267 | .307699 | + / + / − |
+
+절대 목표의 재조합 곡선은 .267712→.337153→.314526→.281454다. 50update를 최종 성적으로 선택하지 않는다.
+새 상대의 두 최종 점수는 모두 공통 초기 .317521보다 낮다. 목표를 바꾸면 모든 문제가 해결된다는 증거는 없다.
+G의 학습 seed7/17은 탐색 반복률 증가/훈련 entropy 하락이 컸고,절대 목표는 같은 양상이 일관되지 않았다.
+행동/성능 변화는 목표 조작에 민감하지만,G가 반복을 유발한 구체적 메커니즘은 아직 확정하지 않았다.
+
+`runs/reference_cross_20261118_seed{7,17,27}/`: 기존 checkpoint의 fresh32과제에서
+random/initial/learned History×상대 상태3×3×학생online/frozen을 평가했다. 총114,048steps다.
+학생online에서 learned−initial은 상대reference가random일 때 −.008006,initial −.024434,learned +.019277이다.
+learned reference에서는3seed 모두 양수였다. frozen에서도 initial reference에서는3seed 모두 음수,
+learned에서는3seed 모두 양수로 순위반전이 남았다. frozen에서도 상대는 계속 학습한다.
+참조 상대 선택에 민감하므로 순수 경험 품질 순위·상대 shaping의 원인·정보 인과효과로 단정하지 않는다.
+각 대각선은 자연 MA 성능을 정확히 재현했다. 세 checkpoint는 같은 과제/평가 난수를 공유한다.
+
+실행 폴더의 `report.html`·`study.json`을 열어 비교한다. objective 폴더의 `verification.json`에
+고정 checkpoint 곡선과 교차 평균,6개 최종 checkpoint×4집합(960trials)의 정확한 재평가,
+1,728개 교차 row의 학생/상대 갱신·frozen table·대각선·source hash 검증을 남겼다.
+조건과 확장 순서는 [Template 계약](../../04_design/Probe_Template_Contract.md#d-029--목표와-상대-상태를-분리하는-개발-비교)을 따른다.
+
+## 이전 개발 실행
+
+`runs/probe_template_dev_20261116/`:32학습/16새파라미터/16요소재조합,3seeds7/17/27,
+200updates×32trials,K12/H48,H32,batch32,CPU1thread,reps1을 실제 실행했다.
+실제384,000+제어307,200 steps/seed,3seed 총2,073,600(평가 별도),기존 실제 예산의50배다.
+새 최종 평가를 사용하지 않은 개발 실행이며,규칙 다양성 수준 간 H1 비교는 아직 아니다.
+
+| 후속 평가 | 초기 | 학습 탐색 | 랜덤 | ε-greedy |
+|---|---:|---:|---:|---:|
+| 새 파라미터 | .270037 | .271545 | .268849 | .245894 |
+| 요소 재조합 | .267712 | .310767 | .284088 | .309214 |
+| 새 상대 설정 | .317521 | .287267 | .292094 | .328400 |
+
+재조합은 초기/랜덤 대비3seed 모두 양수지만 ε-greedy와 비슷했다. 새 파라미터는 차이가 작고 seed별 부호가 섞였고,
+새 상대 설정은 초기 대비3seed 모두 하락했다. 보편적인 탐색 우위나H1/H2 성공은 확인하지 못했다.
+θ짝32/32의 단계별 최선반응은 다르지만 temporal 보너스를 추가해 최선반응이 달라진 규칙은0/64였다.
+재조합을 새로운 전략 구조로 부르지 않는다. 보너스 합계 .15→최대 .30과 정규화의 교란도 남는다.
+
+## History 효과와 학생 활용
+
+각 seed의 `history_seed*/report.html`은 같은 fresh 32 tasks/reps1/평가 seed에서 세 훈련 checkpoint를 paired 비교한다.
+random-reference 상대에서 full Q의 learned-history 평균은 .243832, initial .251839, random .268849였다.
+이 reference는 random-history에는 자연 쌍, learned에는 교차 쌍이므로 순수 경험 품질 순위로 단정하지 않는다.
+같은 random-history를 제공한 학생 점수는 full .268849, 보상 제외/sign 표현 각각 .304245였다.
+이는 Q 표현 비교이며 다른 학습 알고리즘의 성공이나 학생 기본값 변경의 근거는 아니다.
+θ 짝 식별성은 random 100%, learned 87.5%였지만 알려진 prior의 연구자 reward-consistency 진단이며
+정책 내부 규칙 분류를 보여주지 않는다. threshold는 이번 실행에서 지정하지 않았다.
+고정 상대 zero-bonus 양성 대조의 정보 가치 .9는 정확 계산했지만 실제 학습 상대/보너스 조건에 자동 상속하지 않는다.
+
+## 검증
+
+실제 GPU를 포함한 전체173tests,89.476s,OK(skip 없음). Torch 없는 Python173tests,4.165s,OK(skipped=71).
+독립 validator의 신규5개 계약 테스트는 목표값·관측 밖 즉시보상 배제·목표 변경 재개 거부·동결·교차 비용,
+두 목표 초기화/task/seed/예산 일치·압축 저장·완료 후 재개 불변을 확인했다.
+메인이 전체 회귀와 위 실행 원자료 재평가를 수행했고 독립 research_critic이 결과 해석을 검토했다.
+GPU/Colab 코드를 유지하며 실제 Colab/브라우저 실행은 미검증이다.
+
+## 다음 작업과 규모 판단
+
+1. 본격 확대는 필요하다. 다만 단일catalog에서200→2,000update만 늘리는 것을 우선하지 않는다.
+   이번 학습곡선은 단조 개선이 아니며,최종 평가/seed를 열어 좋은 checkpoint를 고르면 안 된다.
+2. 우선 기존 학생/기본G를 고정한 규칙수8/32×독립catalog3×학습seed3의18회 개발 비교를 계획한다.
+   K12/H48·200×32trials이면 훈련 제어 포함12,441,600steps(평가 별도)다. 각catalog 내 평가와 총예산은 공통,
+   catalog 간 생성 seed는 독립으로 둔다. 결과가 약해도 보고하고 매번 새 소규모 성공 관문을 추가하지 않는다.
+   아직 이18회는 실행하지 않았다. 규칙수는 파라미터 수이며 전략 다양성의 직접 조작이라고 부르지 않는다.
+3. 그 실행에서 학생 활용/최선반응·보너스 규모/정규화·정보 난도와 catalog별 효과를 함께 보고,
+   실제 처리량과 학습곡선으로800/2,000update 및8/32/128×3catalog×5seed 본실험 예산을 확정한다.
+   규칙당 노출량 보완과 별도 최종집합 봉인은 유지한다. 작은H32는CPU 경로를 사용한다.
+4. Bayes 양성 대조→실제 Q학생의 활용 가능성,전략적 다양성 정의,서로 다른 학생으로의 전이는 미해결이다.
+   목표 대조나 frozen 검사가 이 문제를 해결했다고 보고하지 않는다. 상대변화 적응의 분리 분석도 후속이다.
+
+## 실행 기반과 과거 근거
+
+실호스트RTX5060Laptop8GB·기존torch2.15+cu132/runtime13.2를사용한다. 제한된프로세스의GPU차단은
+장치부재와구별한다. 작은H32는CPU가빨랐고,H256/batch256측정에서CUDA가약1.23배빨랐다.
+[GPU 측정](../../runs/gpu_runtime_check_20261116/verification.json),[메타 계약](../../04_design/Meta_Exploration_Contract.md)을따른다.
+[이전전체이력](Implementation_Status.md),[v1](../sessions/10_meta_exploration_review.md),
+[관계형v2](../sessions/11_relational_rules_review.md)는당시근거이며현재지시가아니다.

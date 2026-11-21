@@ -1,5 +1,7 @@
 # Project Baseline
 
+본실험의 모델·가설·비교군·평가·예산은 [D-031 확정 명세](../04_design/Adaptation_Experiment.md)를 따른다. 본실험 실행 진입점은 `python -m experiment`이며 실행 결과는 [구현 상태](Implementation_Status.md)에 기록한다. 아래 CURRENT 항목은 공통 환경과 선행 구현을 설명한다.
+
 ## 연구 목적 (FIXED)
 
 Multi-Agent 반복 게임에서 **강화학습한 탐색 전략이 새로운 규칙·상대에 대한 에이전트의 적응을 더 빠르게 만드는가**를 연구한다(D-021/D-022).
@@ -9,7 +11,8 @@ H1/H2의 다양성·재사용 구조는 이 효과를 분석하는 축이다. se
 
 ## 현재 실행 기준 (CURRENT)
 
-- 2인 동시 행동, 기본 n=3, Memory-One. 환경·규칙의 n4/5 실행은 검증했으나 학습된 행동 공간 일반화는 미검증이다.
+- 2인 동시 행동, 기본 n=3, Memory-One. D-030으로 관계형 메타 학습·평가를 n3/4/5로 확대한다.
+  학습된 행동 공간 일반화의 성능 증거와 작은 실행의 공학 검증은 구분한다.
 - 공통 자기 관점 함수 F를 양쪽에 적용하는 대칭 게임. 공통 보상 항목은 n⁴, 저장은 `(2,n,n,n,n)`이다.
   관측 가능한 직전 joint action은 n²개이며 보상 항목 수와 구별한다.
 - 초기 joint action은 독립·균등 무작위, 초기 자기 보상0, 시작 flag=True.
@@ -39,6 +42,17 @@ D-028의 [공통 Template/History 비교](../04_design/Probe_Template_Contract.m
 학습 상대는 계속 유지하고 상대 학습·변화에 대한 적응 자체의 분리 검증만 후속으로 둔다.
 `probe_template`는 구조가 유사한 게임과 기존 요소 재조합을 구분하는 개발 경로이며 기존 v2를 대체하지 않는다.
 
+D-029로 같은 조건에서 `retained_gain`과 `assessment_return`을 비교하는 개발 경로를 추가했다.
+기본 목표는G이며 절대 후속보상은 명시적인 비교 조건이다. 두 조건 모두 경험 제거 대조를 계산한다.
+History×상대 상태3×3와 학생 online/frozen 평가에서 frozen은 학생만 고정하고 상대는 계속 학습한다.
+상세 조건과 확대 순서는 [공통 Template 계약](../04_design/Probe_Template_Contract.md)을 따른다.
+
+D-030의 `diverse_relational`은 focused(contest)/broad(사회적 유인·상성·상호 이력·숨은 보상)로
+훈련 생성 범위를 조절하고 기존 관계를 결합한 예외 분포를 따로 평가한다. 규칙 수8/32/128과
+n3/4/5 비교를 별도 축으로 둔다. 공통 평가 예약·훈련 prefix·canonical 중복 제거를 사용한다.
+이는 전략적 다양성/탐색 유용성의 보장이 아니다. 현재 n3 probe는 분석·회귀용으로 유지한다.
+이번 주 확정 범위와 실행 목표는 [D-030](../04_design/Relational_Game_Contract.md#d-030--행동-공간과-생성-구조-확대-및-이번-주-설계-마감-2026-11-18)을 따른다.
+
 ## 문서의 역할
 
 - [Implementation Status](Implementation_Status.md): 현재 구현·최신 결과 결론·검증·다음 작업의 진입점.
@@ -49,4 +63,4 @@ D-028의 [공통 Template/History 비교](../04_design/Probe_Template_Contract.m
 - [Research Log](Research_Log.md): 탐구 경과. [Idea Inbox](../03_ideas/Idea_Inbox.md): 아이디어 출처·상태 색인.
 
 현재 완료 여부와 결과 수치는 이 문서에 누적하지 않는다. 규칙 변경 scheduler·비대칭 생성·긴 추가 상태·
-다른 학생/예산·새 목적함수는 미채택이며 [미해결 질문](Open_Questions.md)을 따른다.
+다른 학생/예산·비교 이후의 기본 목적함수 변경은 미채택이며 [미해결 질문](Open_Questions.md)을 따른다.

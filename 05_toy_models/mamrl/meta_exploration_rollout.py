@@ -152,7 +152,7 @@ def meta_trial_stream(rule, *, seed, steps=12, opponent_profile='steady', assess
                 sum(abs(prob-1/tensor.n) for prob in event['opponent_action_probabilities'])>1e-12
                 for event in erased_assessment)}
 
-def assess_pair(env, initial, learner, adversary, steps):
+def assess_pair(env, initial, learner, adversary, steps, *, learn_student=True, learn_opponent=True):
     observations = initial
     records = []
     for index in range(steps):
@@ -162,8 +162,10 @@ def assess_pair(env, initial, learner, adversary, steps):
         a1 = adversary.act(observations[1])
         result = env.step(a0,a1)
         terminal = index == steps-1
-        learner.update(observations[0],a0,result.rewards[0],result.observations[0],terminal=terminal)
-        adversary.update(observations[1],a1,result.rewards[1],result.observations[1],terminal=terminal)
+        if learn_student:
+            learner.update(observations[0],a0,result.rewards[0],result.observations[0],terminal=terminal)
+        if learn_opponent:
+            adversary.update(observations[1],a1,result.rewards[1],result.observations[1],terminal=terminal)
         records.append(_event(observations,(a0,a1),result,result.observations,terminal,opponent_probs))
         observations = result.observations
     return records

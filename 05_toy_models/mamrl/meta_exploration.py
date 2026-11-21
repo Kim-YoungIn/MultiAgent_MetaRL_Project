@@ -11,7 +11,7 @@ import random
 import statistics
 import sys
 
-from .common import positive_integer, validate_seed
+from .common import positive_integer, validate_n, validate_seed
 from .environment import Observation
 from .generated_tasks import build_manifest
 from .logical_rules import rule_from_dict
@@ -42,8 +42,10 @@ class MetaConfig:
     batch_size: int = 1
     assessment_steps: int | None = None
     train_rule_limit: int | None = None
+    objective: str = 'retained_gain'
 
     def __post_init__(self):
+        if self.objective not in ('retained_gain','assessment_return'):raise ValueError('unknown exploration objective')
         if self.train_rule_limit is not None:positive_integer(self.train_rule_limit,'train_rule_limit')
         if self.assessment_steps is not None:positive_integer(self.assessment_steps,'assessment_steps')
         if validate_seed(self.seed) is None:
@@ -169,12 +171,13 @@ def replay_exploration(model, rollout):
     return torch.stack(logs),torch.stack(values),torch.stack(entropies)
 
 
-def meta_targets(rollouts):
+def meta_targets(rollouts, objective='retained_gain'):
     """No exploration rewards here: a terminal downstream target for each action."""
     import torch
     if not rollouts:
         raise ValueError('meta batch must be nonempty')
-    values=[r.meta_reward for r in rollouts for _ in r.actions]
+    if objective not in ('retained_gain','assessment_return'):raise ValueError('unknown exploration objective')
+    values=[(r.meta_reward if objective=='retained_gain' else r.trial['assessment_mean']) for r in rollouts for _ in r.actions]
     result=torch.tensor(values,dtype=torch.float32)
     if not result.numel() or not torch.isfinite(result).all():
         raise ValueError('meta targets must be nonempty and finite')
@@ -242,7 +245,7 @@ def train_meta(config, manifest=None, *, opponent_suite='q_learning', checkpoint
                      'erased_mean':rollout.trial['erased_mean']}
                     for (entry,profile,trial_seed),rollout in zip(specifications,batch)]
         synchronize();timing['collection_seconds']+=perf_counter()-started;started=perf_counter()
-        target=meta_targets(batch).to(device)
+        target=meta_targets(batch,config.objective).to(device)
         old_values=torch.tensor([v for r in batch for v in r.old_values],dtype=torch.float32,device=device)
         advantage=target-old_values
         advantage=(advantage-advantage.mean())/(advantage.std(unbiased=False)+1e-8)
@@ -267,6 +270,7 @@ def train_meta(config, manifest=None, *, opponent_suite='q_learning', checkpoint
         history.append({'update':update,**{k:statistics.mean(x[k] for x in metrics) for k in metrics[0]},
                         'mean_meta_reward':statistics.mean(r.meta_reward for r in batch),
                         'mean_assessment':statistics.mean(r.trial['assessment_mean'] for r in batch),
+                        'mean_teacher_target':float(target.mean()),
                         'mean_exploration':statistics.mean(r.trial['exploration_mean'] for r in batch),
                         'opponent_policy_l1_change':statistics.mean(r.trial['opponent_final']['policy_l1_change'] for r in batch),
                         'trials':provenance})
@@ -377,7 +381,8 @@ def _write(path,value):
 def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_update=8,steps=12,hidden_size=32,reps=2,
                         catalog='logical',opponent_suite='q_learning',device='cpu',batch_size=1,resume=False,
                         stop_after_update=None,checkpoint_every=10,backup_dir=None,assessment_steps=None,
-                        catalog_seed=None,train_rules=8,fresh_rules=8,structural_rules=8,manifest_path=None,train_rule_limit=None):
+                        catalog_seed=None,train_rules=8,fresh_rules=8,structural_rules=8,manifest_path=None,train_rule_limit=None,objective='retained_gain',
+                        n=3,diversity='broad'):
     import torch
     from .recurrent import save_checkpoint,load_checkpoint
     from .devices import resolve_device
@@ -389,8 +394,14 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
         raise ValueError('seeds must be unique explicit nonempty seeds')
     for k,v in (('updates',updates),('trials_per_update',trials_per_update),('steps',steps),('hidden_size',hidden_size),('reps',reps),('batch_size',batch_size),('checkpoint_every',checkpoint_every)):
         positive_integer(v,k)
-    if catalog not in ('logical','relational','probe_template') or opponent_suite not in OPPONENT_SUITES:
+    if objective not in ('retained_gain','assessment_return'):raise ValueError('unknown exploration objective')
+    if catalog not in ('logical','relational','probe_template','diverse_relational') or opponent_suite not in OPPONENT_SUITES:
         raise ValueError('unknown catalog or opponent suite')
+    n=validate_n(n)
+    if n not in (3,4,5):raise ValueError('meta catalogs support n=3, 4 or 5')
+    if catalog in ('logical','probe_template') and n!=3:
+        raise ValueError('logical and probe_template meta catalogs currently require n=3')
+    if diversity not in ('focused','broad'):raise ValueError('unknown diversity setting')
     if stop_after_update is not None:positive_integer(stop_after_update,'stop_after_update')
     assessment_steps=steps if assessment_steps is None else positive_integer(assessment_steps,'assessment_steps')
     selected_device=resolve_device(device)
@@ -408,7 +419,8 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
     if not resume:
         sources.mkdir()
         for file in sorted(Path(__file__).parent.glob('*.py')):(sources/file.name).write_bytes(file.read_bytes())
-    if catalog_seed is None:catalog_seed=20261116 if catalog=='probe_template' else 20261114
+    if catalog_seed is None:
+        catalog_seed={'probe_template':20261116,'diverse_relational':20261118}.get(catalog,20261114)
     if manifest_path is not None:
         manifest=json.loads(Path(manifest_path).read_text())
         if catalog=='probe_template':
@@ -417,6 +429,10 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
         elif catalog=='relational':
             from .relational_catalog import validate_relational_manifest
             validate_relational_manifest(manifest)
+        elif catalog=='diverse_relational':
+            from .diverse_catalog import validate_diverse_manifest
+            validate_diverse_manifest(manifest)
+            if manifest['diversity']!=diversity:raise ValueError('manifest diversity does not match requested diversity')
         else:
             from .generated_tasks import validate_manifest
             validate_manifest(manifest)
@@ -431,10 +447,15 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
             'scope':'raw reward fixed-opponent controls; actual MA policies learn'})
     elif catalog=='relational':
         from .relational_catalog import build_relational_manifest,relational_distances
-        manifest=build_relational_manifest(seed=catalog_seed)
+        manifest=build_relational_manifest(n=n,seed=catalog_seed)
         if not resume:_write(p/'distances.json',relational_distances(manifest))
+    elif catalog=='diverse_relational':
+        from .diverse_catalog import build_diverse_manifest
+        manifest=build_diverse_manifest(n=n,seed=catalog_seed,train_rules=train_rules,
+                                       fresh_rules=fresh_rules,structural_rules=structural_rules,diversity=diversity)
     else:
         manifest=build_manifest(seed=catalog_seed)
+    if manifest['n']!=n:raise ValueError('manifest n does not match requested n')
     selected_training=[r['id'] for r in manifest['rules'] if r['split']=='train']
     if train_rule_limit is not None:
         positive_integer(train_rule_limit,'train_rule_limit')
@@ -444,18 +465,20 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
     if not resume:_write(p/'manifest.json',manifest)
     elif manifest!=json.loads((p/'manifest.json').read_text()):raise ValueError('resume catalog mismatch')
     protocol={'version':2,'catalog':catalog,'catalog_seed':catalog_seed,'training_rule_ids':selected_training,'train_rule_limit':train_rule_limit,'catalog_counts':dict(Counter(r['split'] for r in manifest['rules'])),'opponent_suite':opponent_suite,'seeds':list(seeds),'updates':updates,'trials_per_update':trials_per_update,
-              'steps':steps,'assessment_steps':assessment_steps,'hidden_size':hidden_size,'reps':reps,'n':3,'device':str(selected_device),'batch_size':batch_size,
+              'steps':steps,'assessment_steps':assessment_steps,'hidden_size':hidden_size,'reps':reps,'n':n,'device':str(selected_device),'batch_size':batch_size,
               'torch_version':str(torch.__version__),'torch_threads':torch.get_num_threads(),
               'python_version':sys.version,'source_sha256':hashes,
               'opponent_profiles':OPPONENT_PROFILES,'training_profiles':list(OPPONENT_SUITES[opponent_suite]['train']),
               'heldout_profile':OPPONENT_SUITES[opponent_suite]['heldout'],
               'student':{'algorithm':'tabular Q','alpha':.5,'gamma':.95,'assessment_epsilon':0},
-              'objective':'assessment_mean minus paired erased-student assessment_mean; no exploration reward',
+              'objective':objective,
+              'objective_definition':('assessment_mean minus paired erased-student assessment_mean' if objective=='retained_gain' else 'absolute assessment_mean')+'; no exploration reward',
               'inner_training_gameplay_steps_per_seed':updates*trials_per_update*(steps+assessment_steps),
               'inner_training_control_steps_per_seed':updates*trials_per_update*assessment_steps,
               'teacher_training_decisions_per_seed':updates*trials_per_update*steps,
               'selection':'fixed final checkpoint; final task results never select weights',
               'scope':'one learner algorithm and bounded generated distribution, not general meta-exploration proof'}
+    if catalog=='diverse_relational':protocol['diversity']=manifest['diversity']
     if resume:
         saved=json.loads((p/'protocol.json').read_text())
         if saved!=protocol:raise ValueError('resume protocol/software/source mismatch; use original run settings')
@@ -474,7 +497,7 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
     options={'steps':steps,'reps':reps,'batch_size':batch_size,'assessment_steps':assessment_steps}
     baselines={}
     reference_factories=[('random',RandomExplorer),('epsilon_greedy',EpsilonExplorer),('repeat',RepeatExplorer),('balanced',BalancedExplorer)]
-    if catalog in ('relational','probe_template'): reference_factories.append(('change',ChangeExplorer))
+    if catalog in ('relational','probe_template','diverse_relational'): reference_factories.append(('change',ChangeExplorer))
     if catalog=='probe_template':reference_factories.append(('systematic',SystematicExplorer))
     if resume and (p/'baselines.json').exists():
         baselines=json.loads((p/'baselines.json').read_text())
@@ -485,7 +508,7 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
         _write(p/'baselines.json',baselines)
     mirror()
     record={'version':2,'protocol':protocol,'baselines':baselines,'runs':[],'comparisons':{},
-            'rule_catalog':manifest['rules'] if catalog in ('relational','probe_template') else []}
+            'rule_catalog':manifest['rules'] if catalog in ('relational','probe_template','diverse_relational') else []}
     for seed in seeds:
         d=p/f'seed{seed}'
         if resume and (d/'evaluation.json').is_file():
@@ -494,7 +517,7 @@ def run_meta_experiment(output_dir, *, seeds=(7,17,27),updates=40,trials_per_upd
         checkpoint=d/'training_state.pt'
         started=perf_counter()
         result=train_meta(MetaConfig(seed=seed,updates=updates,trials_per_update=trials_per_update,
-                                    steps=steps,hidden_size=hidden_size,device=str(selected_device),batch_size=batch_size,assessment_steps=assessment_steps,train_rule_limit=train_rule_limit),
+                                    steps=steps,hidden_size=hidden_size,device=str(selected_device),batch_size=batch_size,assessment_steps=assessment_steps,train_rule_limit=train_rule_limit,objective=objective),
                           manifest,opponent_suite=opponent_suite,checkpoint_path=checkpoint,
                           resume=resume and checkpoint.exists(),stop_after_update=stop_after_update,
                           checkpoint_every=checkpoint_every,checkpoint_callback=mirror)
@@ -544,7 +567,10 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--seeds',type=int,nargs='+',default=[7,17,27])
-    parser.add_argument('--catalog',choices=('logical','relational','probe_template'),default='logical')
+    parser.add_argument('--catalog',choices=('logical','relational','probe_template','diverse_relational'),default='logical')
+    parser.add_argument('--n',type=int,default=3,help='action count (3, 4 or 5; catalog-specific limits apply)')
+    parser.add_argument('--diversity',choices=('focused','broad'),default='broad')
+    parser.add_argument('--objective',choices=('retained_gain','assessment_return'),default='retained_gain')
     parser.add_argument('--manifest',type=Path,help='validated common catalog; generation counts are ignored')
     parser.add_argument('--train-rule-limit',type=int,help='nested prefix subset of the common training rules')
     parser.add_argument('--catalog-seed',type=int)
@@ -567,7 +593,7 @@ def main():
                             steps=args.steps,hidden_size=args.hidden_size,reps=args.reps,
                             catalog=args.catalog,opponent_suite=args.opponent_suite,device=args.device,batch_size=args.batch_size,
                             resume=args.resume,stop_after_update=args.stop_after_update,checkpoint_every=args.checkpoint_every,backup_dir=args.backup_dir,assessment_steps=args.assessment_steps,catalog_seed=args.catalog_seed,train_rules=args.train_rules,
-                            fresh_rules=args.fresh_rules,structural_rules=args.structural_rules,manifest_path=args.manifest,train_rule_limit=args.train_rule_limit)
+                            fresh_rules=args.fresh_rules,structural_rules=args.structural_rules,manifest_path=args.manifest,train_rule_limit=args.train_rule_limit,objective=args.objective,n=args.n,diversity=args.diversity)
         if result.get('paused'):print(json.dumps(result))
     except (TypeError,ValueError,OSError,RuntimeError) as exc:
         parser.error(str(exc))

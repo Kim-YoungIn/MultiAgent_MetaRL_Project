@@ -1,10 +1,33 @@
 # Multi-Agent Meta-RL — MAMRL
 
-두 에이전트가 논리적 보상 규칙 아래에서 반복 게임을 플레이하는 연구용 토이모델이다.
-현재 구현은 Memory-One 환경, 논리 규칙 생성기와 Compiler, recurrent PPO 학습,
-온라인 학습 상대와의 메타 탐색 실험, 생성 게임의 비교 실험 및 로컬 HTML 리포트를 제공한다.
+두 에이전트가 동시에 행동하고 각자 자기 보상으로 학습하는 반복 게임에서, 메타학습한 탐색 정책이 새 게임에 대한 적응을 빠르게 하는지 평가한다.
 
-## 현재 구현
+## D-031 실험 모델
+
+탐색자가 먼저 경험을 수집하고 동일한 온라인 Q 학생에게 제어권을 넘긴다. 학생의 후속 성능을 학습 목표로 삼은 탐색자(M), 탐색 중 자기 보상을 최적화한 탐색자(P), 첫 관측 이후 상대 행동과 보상을 가린 탐색자(O)를 비교한다. 상대는 매 시행 Q-learning 또는 Expected SARSA로 학습한다. D-031 v2 생성기는 숨은 행동 보너스의 상대적 크기를 게임마다 표집해 학습 규칙과 미학습 규칙을 분리한다. 행동 이름을 바꾸거나 행동 수가 달라져도 같은 탐색자 가중치를 사용할 수 있다. [실험 설계와 판정 기준](04_design/Adaptation_Experiment.md)
+
+WSL 또는 Linux의 저장소 루트에서 PyTorch와 NumPy가 설치된 Python을 사용한다. 아래 첫 줄은 훈련 수와 예산을 출력한다. 두 번째 줄은 별도 seed로 모든 블록의 훈련·평가·보고 경로를 짧게 실행한다.
+
+```bash
+.venv/bin/python -m experiment plan
+.venv/bin/python -m experiment run --dev --block all --output runs/my_d031_dev
+```
+
+본실험 주 조건은 5개 훈련 규칙 집합 × 각 5개 초기화 × 세 방법으로 75회 학습한다. 한 모델당 800 updates × 32 trials, 탐색 24턴, 학생 평가 24턴이다. 제거 대조를 포함한 총 훈련 예산은 주 조건 138,240,000턴, 확장 전체 691,200,000턴이며 최종 평가 비용은 별도다.
+
+```bash
+.venv/bin/python -m experiment prepare --output runs/my_d031
+.venv/bin/python -m experiment run --block primary --output runs/my_d031
+```
+
+- 확장은 같은 출력 경로에 `--block rules`, `opponents`, `families`, `actions` 순서로 실행한다. `--block all`로 전체를 실행할 수도 있다. `actions`는 n=3과 n=5 모델을 n=3/4/5 패널에서 평가한다.
+- 규모를 나눠 실행할 때는 `--catalog 1 --replica 1`처럼 범위를 지정한다. 같은 출력 경로에서 서로 다른 조합을 병렬 실행할 수 있다. 각 작업에 `--defer-report`를 주고 끝에서 `python -m experiment report --output runs/my_d031`로 모으면 전체 자료를 한 번 읽는다.
+- 중단 후 같은 명령을 실행하면 완료한 PPO 업데이트에서 재개한다. 평가 도중 중단된 방법은 해당 방법의 평가를 다시 실행한다. 코드·실험 명세·PyTorch 버전·장치가 바뀌면 새 출력 경로를 사용한다. 생성한 패널의 과거 중복 검사 범위는 `panels/panel.json`에 기록된다. 동료가 같은 평가 규칙으로 독립 실행하려면 준비 직후의 `study.json`, `panel_sha256.json`, `panels/`를 함께 복사한다. 새 체크아웃에서 과거 runs 없이 생성하면 제외 목록이 달라질 수 있다.
+- 기본은 CPU다. CUDA가 보이는 WSL 또는 Colab에서 같은 명령에 `--device cuda`를 추가한다. 준비와 보고서 재생성에도 같은 장치를 지정한다. GPU는 신경망 연산을 수행하고 게임과 표 형식 학습자는 CPU에서 실행한다.
+- 결과를 읽을 때는 출력 폴더의 **`summary.md`**에서 M−P 적응 곡선 면적, 탐색 길이별 절대 성능과 경험·상대 교차표를 먼저 본다. `report.json`에는 가족·상대별 결과, 계층 bootstrap 구간과 규칙 재표집 민감도가 있다. 개발 실행은 기능 검증용이며 주가설 판정에는 봉인된 본실험 패널과 25개 모델 쌍을 사용한다.
+- 모델은 `cells/<조건>/c<catalog>/j<replica>/training/<방법>/`에 저장된다. Python에서 `from experiment.training import load_model`로 불러오고 초기 가중치는 `load_model(path, initial=True)`로 읽는다. 시행별 seed와 곡선은 `*.trials.jsonl.gz`, 훈련 노출·시간·메모리 기록은 `ledger.json`에 있다.
+
+## 선행 모델과 공통 시뮬레이터
 
 - 2인 동시 행동, 기본 행동 수 n=3. 환경과 규칙은 n=4/5도 지원한다.
 - 보상은 직전·현재 joint action으로 결정한다. 현재 생성기는 양쪽이 자기 관점에서
@@ -142,6 +165,55 @@ History 파일은한벌이며 학생별row는hash/id로 참조한다. full repla
 `--threshold` 또는 `--reference-low/--reference-high/--threshold-fraction`으로 사전 기준을 지정한다.
 reference high를 최대 달성 가능값으로 자동 가정하지 않는다. 미도달 시간은None/우측검열로 기록한다.
 개별 연구결과의 독립 실행용 도구이며,이 명령 자체가H1의 다양성 효과를 검증하지는 않는다.
+
+같은 조건에서 G 목표와 절대 후속보상 목표를 학습·비교하려면 다음을 실행한다.
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.objective_study --manifest runs/my_probe_template/manifest.json --output-dir runs/my_objective_study
+```
+
+기본은 두 목표×3seed×200updates이며0/50/100/200의 고정 평가와 `report.html`을 남긴다.
+같은 인자에 `--resume`을 붙여 update 경계에서 재개한다. 단일 메타 실행에서는
+`--objective assessment_return`으로 선택하며 기본값은 `retained_gain`이다.
+두 목표 모두 경험 제거 대조를 계산한다. 새 평가 trajectory 대신 task별 지표를 보존한다.
+
+탐색 기록과 상대 상태를3×3으로 교차하고 학생 학습 유무를 비교하려면 다음을 실행한다.
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.reference_study --manifest runs/my_probe_template/manifest.json --initial-checkpoint runs/my_probe_template/seed7/initial.pt --checkpoint runs/my_probe_template/seed7/policy.pt --output-dir runs/my_reference_study
+```
+
+기본 fresh 평가에서 각 조합의 online/frozen 점수와 원자료를 저장한다.
+frozen은 학생만 고정하며 상대는 계속 학습한다. 대각선은 원래 자연 MA 조합이고,
+교차 조합은 상대 상태 선택에 대한 민감도 분석이다. 순수 경험 품질의 인과 순위로 해석하지 않는다.
+
+## 행동 공간과 규칙 생성 범위 확대
+
+`diverse_relational`은 n=3/4/5와 가변 규칙 수를 지원한다. `focused`는 상성/시간 관계 recipe,
+`broad`는 사회적 유인·상성·상호 이력·숨은 보상의 네 recipe를 섞는다.
+두 조건은 같은 catalog seed와 평가 개수에서 같은 평가 규칙을 공유한다.
+예외 분할은 기존 논리 요소의 조건부 결합이며 새 primitive 전이가 아니다.
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.meta_exploration --catalog diverse_relational --n 5 --diversity broad --catalog-seed 20261118 --train-rules 128 --fresh-rules 16 --structural-rules 16 --opponent-suite mixed_learning --seeds 7 --updates 200 --trials-per-update 32 --steps 12 --assessment-steps 48 --batch-size 32 --reps 1 --output-dir runs/my_diverse_n5
+```
+
+같은 n·평가 개수·catalog seed에서 `--diversity focused` 또는 규칙 수8/32/128로 바꿔 비교한다.
+하나의 manifest를 공유할 때는 `--manifest ... --train-rule-limit N`을 사용한다.
+행동 수·diversity는 manifest와 일치시켜야 한다. 과거 `probe_template`/`logical` 메타 경로는 n3 전용이다.
+가족/계수/보상표 차이가 전략 다양성이나 탐색 유용성을 보장하지 않으므로 manifest의 compiled audit를 함께 본다.
+
+각 행동 수의 manifest를 준비한 뒤 같은 탐색 checkpoint를 재학습 없이 평가할 수 있다.
+
+```bash
+PYTHONPATH=05_toy_models OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m mamrl.action_transfer --checkpoint runs/my_diverse_n3/seed7/policy.pt --manifests runs/my_diverse_n3/manifest.json runs/my_diverse_n4/manifest.json runs/my_diverse_n5/manifest.json --batch-size 32 --output-dir runs/my_action_transfer
+```
+
+같은 n 안에서 랜덤 탐색과 task/난수를 맞추고 후속 성능·G·가족별 점수·반복률·행동 방문률을 저장한다.
+탐색 가중치는 고정하지만 학생/상대는 학습한다. n 사이의 보상표는 달라 생보상 차이를 행동 수만의 효과로 보지 않는다.
+훈련 행동 수는 원래 실행의 protocol로 확인한다. 작은 실행 성공은 학습된 행동 공간 일반화의 증거가 아니다.
+같은 인자로 `--checkpoint .../initial.pt`와 별도 출력 경로를 지정해 초기 탐색도 평가한다.
+두 실행의 task/seed를 맞춰 학습 전후를 비교한다. 이 평가는 메타 가중치를 고정한 학생 적응이며 학생 zero-shot이 아니다.
 
 ## GPU와 Colab 실행
 

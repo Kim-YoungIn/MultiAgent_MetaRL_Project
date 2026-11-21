@@ -6,9 +6,9 @@
 | 작업 단위 | 범위 | 계약·인수 근거 |
 |---|---|---|
 | 환경 | 보상 텐서·동시 행동·관측·초기화·경계 | [Interface Contract](Interface_Contract.md) |
-| 규칙 | 의미 명세·Compiler·catalog·중복·거리·audit | [Relational Game Contract](Relational_Game_Contract.md) |
+| 규칙 | 의미 명세·Compiler·가변catalog·focused/broad·중복·거리·audit | [Relational Game Contract](Relational_Game_Contract.md)의D-030 |
 | 메타 학습 | 탐색자·학생·학습 상대·PPO·paired 대조 | [Meta Exploration Contract](Meta_Exploration_Contract.md) |
-| 결과 | 상세파일·집계·체크포인트·HTML·재현 | 위 계약의 artifacts/verification |
+| 결과 | 상세파일·집계·행동 공간별checkpoint 평가·HTML·재현 | 위 계약의 artifacts/verification |
 
 메인은 범위·통합·최종 검증을 책임진다. 분리 가능한 구현과 독립 계약 검증에만 subagent를 사용하고
 같은 파일을 동시에 수정하지 않는다. 실행하지 않은 검증을 통과로 기록하지 않는다.

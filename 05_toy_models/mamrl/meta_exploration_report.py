@@ -8,11 +8,13 @@ def render_meta_report(record):
     assessment_steps=record['protocol'].get('assessment_steps',record['protocol']['steps'])
     esc=lambda x:html.escape(str(x),quote=True)
     num=lambda x:'—' if x is None else f'{x:.4f}'
+    objective=record['protocol'].get('objective','retained_gain')
+    target_description='후속 평균 보상' if objective=='assessment_return' else '평가−경험 제거 대조'
     parts=['<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
            '<title>메타 탐색과 학습하는 상대</title><style>body{font:16px/1.6 system-ui;max-width:1150px;margin:28px auto;padding:0 18px;background:#f5f7fb;color:#152538}table{border-collapse:collapse;width:100%;background:white;margin:18px 0}td,th{border:1px solid #cbd4df;padding:8px;text-align:left}pre{white-space:pre-wrap}svg{background:white;width:100%}</style>',
            '<h1>메타 탐색 → 적응 학습 → 학습하는 상대</h1>',
            '<p>탐색자가 만든 경험을 같은 온라인 Q 학습기가 활용합니다. 상대도 자기 경험으로 Q와 전략을 갱신합니다.</p>',
-           f'<p>탐색 {record["protocol"]["steps"]}회 + 실제 평가 {assessment_steps}회 + 경험 제거 대조 {assessment_steps}회. 탐색자의 meta reward는 평가−경험 제거 대조입니다. 탐색 중 보상을 더하지 않습니다.</p>',
+           f'<p>탐색 {record["protocol"]["steps"]}회 + 실제 평가 {assessment_steps}회 + 경험 제거 대조 {assessment_steps}회. 탐색자의 학습 목표는 {target_description}입니다. G와 실제 성능을 함께 보고합니다. 탐색 중 보상을 더하지 않습니다.</p>',
            '<p><a href="experiment.json">전체 원자료</a> · <a href="protocol.json">프로토콜</a> · <a href="manifest.json">생성 규칙</a></p>']
     labels={'initial':'학습 전 탐색','trained':'메타 학습 탐색','random':'랜덤 탐색','epsilon_greedy':'ε-greedy 탐색','repeat':'반복 탐색'}
     if 'balanced' in record['baselines']: labels['balanced']='반복/변경 50:50'
@@ -61,13 +63,16 @@ def render_meta_report(record):
             parts.append('<details><summary>'+esc(entry['id']+' / '+entry['family']+' / '+entry['split'])+'</summary><p>'+esc(entry['description'])+'</p><p>실제 PD 성립: '+esc(entry['audit']['pd']['is_prisoners_dilemma'])+' · 상대에 공통인 순수 최적 대응이 없는 상태 수: '+str(entry['audit']['states_without_universal_pure_best_response'])+'</p></details>')
     parts.append('<h2>구성과 측정의 한계</h2><ul><li>G는 경험을 보존한 Q와 지운 Q의 성능 차이입니다. 순수 정보량이 아니며 학습 능력·상태 방문·상대에 대한 영향도 포함합니다.</li></ul>')
     parts.append('<p>초기·최종 탐색 가중치는 평가 중 고정하고 학생과 상대의 Q는 갱신합니다. 최종 평가 규칙을 메타 학습에 쓰지 않습니다. 상대 초기 조건은 맞추되 탐색에 반응해 다르게 학습하는 것은 허용합니다.</p>')
-    if record['protocol'].get('catalog')=='relational':
+    if record['protocol'].get('catalog') in ('relational','diverse_relational'):
         parts.append('<p>사회적 반복/변경·상성·상호 이력·숨은 보상·예외를 포함하는 제한된 관계 분포입니다. 현재 행동 일치를 모든 게임에 강제하지 않습니다. 상대는 Q-learning과 Expected SARSA이며 새 설정은 이미 학습한 Expected SARSA의 파라미터 변화입니다. 이전 catalog 결과와의 차이는 생성기 또는 상대 중 하나의 인과 효과가 아닙니다.</p>')
+        if record['protocol'].get('catalog')=='diverse_relational':
+            parts.append('<p>focused/broad는 생성 recipe의 폭을 바꿉니다. 규칙 개수와 전략 다양성은 별개이며,가족별·최선반응 audit를 함께 확인해야 합니다. 예외 평가는 기존 문법의 조건부 조합 전이이며 새 primitive 전이가 아닙니다.</p>')
     elif record['protocol'].get('catalog')=='probe_template':
         parts.append('<p>공통 safe/risk/marker Template의 미학습 파라미터와 반복·모방 보너스 재조합을 분리합니다. 역할 재명명은 독립 구조 다양성으로 세지 않습니다. 정보가치의 정확 계산은 고정 상대 대조이며 실제 학습 상대의 성공 보장이 아닙니다.</p>')
     else:
         parts.append('<p>기존 논리 catalog는 현재 행동 일치 관계를 공통으로 포함합니다. 상대 suite에 따라 사용 알고리즘을 protocol에서 확인하세요.</p>')
-    parts.append('<p>균등 행동은 n=3에서 반복/변경을1:2로 만듭니다. 50:50 대조도 숨은 규칙은 알지 못합니다. PD의 즉시 우월성은 반복게임의 최적 전략이나 모든 변경 행동의 장기적 동등성을 보장하지 않습니다. 제한된 seed의 기술 통계이며 H1/H2 확증이 아닙니다.</p></html>')
+    n=record['protocol'].get('n',3)
+    parts.append(f'<p>균등 행동은 n={n}에서 반복/변경을1:{n-1}로 만듭니다. 50:50 대조도 숨은 규칙은 알지 못합니다. PD의 즉시 우월성은 반복게임의 최적 전략이나 모든 변경 행동의 장기적 동등성을 보장하지 않습니다. 제한된 seed의 기술 통계이며 H1/H2 확증이 아닙니다.</p></html>')
     return ''.join(parts)
 
 

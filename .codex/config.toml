@@ -1,9 +1,9 @@
 # Project-local defaults for MAMRL (Codex CLI 0.159.0+ for Terra).
-model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model = "gpt-6.2-sol"
+model_reasoning_effort = "high"
 
 [agents]
 enabled = true
-max_concurrent_threads_per_session = 2
+max_concurrent_threads_per_session = 3
 default_subagent_model = "gpt-6.1-terra"
-default_subagent_reasoning_effort = "medium"
+default_subagent_reasoning_effort = "high"

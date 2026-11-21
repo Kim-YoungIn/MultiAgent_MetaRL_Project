@@ -1,0 +1,1041 @@
+diff --git a/05_toy_models/mamrl/meta_exploration_rollout.py b/05_toy_models/mamrl/meta_exploration_rollout.py
+index f1f2134..3734f11 100644
+--- a/05_toy_models/mamrl/meta_exploration_rollout.py
++++ b/05_toy_models/mamrl/meta_exploration_rollout.py
+@@ -16,6 +16,7 @@ from .common import positive_integer, validate_action, validate_seed
+ from .environment import MemoryOneEnv
+ from .rules import compile_rule
+ from .tensor import RewardTensor
++from .structured_games import StructuredGame, StructuredEnv
+ 
+ 
+ OPPONENT_PROFILES = {
+@@ -33,7 +34,7 @@ OPPONENT_SUITES = {
+ 
+ 
+ def _make_env(tensor, steps, seed):
+-    env = MemoryOneEnv(tensor, max_steps=steps)
++    env = StructuredEnv(tensor, max_steps=steps) if isinstance(tensor, StructuredGame) else MemoryOneEnv(tensor, max_steps=steps)
+     return env, env.reset(seed=seed)
+ 
+ 
+@@ -81,7 +82,7 @@ def meta_trial_stream(rule, *, seed, steps=12, opponent_profile='steady', assess
+         raise TypeError('trial requires an explicit seed')
+     if opponent_profile not in OPPONENT_PROFILES:
+         raise ValueError('unknown opponent profile')
+-    tensor = rule if isinstance(rule, RewardTensor) else compile_rule(rule)
++    tensor = rule if isinstance(rule, (RewardTensor, StructuredGame)) else compile_rule(rule)
+     seed_rng = random.Random(seed)
+     names = ('teacher', 'student', 'opponent', 'exploration_reset', 'assessment_reset')
+     seeds = {name:seed_rng.getrandbits(63) for name in names}
+diff --git a/05_toy_models/mamrl/structured_games.py b/05_toy_models/mamrl/structured_games.py
+new file mode 100644
+index 0000000..0d8e2b0
+--- /dev/null
++++ b/05_toy_models/mamrl/structured_games.py
+@@ -0,0 +1,545 @@
++"""Procedural finite-state games with bounded action history.
++
++Drop-in environment API for mamrl.rollout.run_episode. This module is opt-in:
++existing RuleSpec, RewardTensor, MemoryOneEnv and D-031 studies are unchanged.
++
++A game is a legacy Memory-One payoff tensor plus *logical*, player-symmetric
++reward and state-transition clauses. Clauses are evaluated against the OLD
++state and bounded action history. The joint actions are simultaneous.
++
++No dense (n ** (2 * (L + 1))) tensor is allocated for history length L.
++"""
++from __future__ import annotations
++
++import argparse
++from dataclasses import asdict, dataclass, field
++import hashlib
++import json
++import random
++from typing import Any
++
++from .adaptive_agents import OnlineQ
++from .common import finite_reward, positive_integer, validate_action, validate_n, validate_seed
++from .environment import MemoryOneEnv, Observation, StepResult
++from .rules import compile_rule, generate_rule
++from .tensor import RewardTensor
++
++PREDICATES = frozenset({
++    'always', 'own_is', 'other_is', 'both_is', 'match', 'repeat',
++    'copy', 'own_count', 'other_count', 'matching_count',
++    'state_min', 'state_max',
++})
++COUNT_PREDICATES = frozenset({'own_count', 'other_count', 'matching_count'})
++ACTION_PREDICATES = frozenset({'own_is', 'other_is', 'both_is', 'own_count', 'other_count'})
++STATE_PREDICATES = frozenset({'state_min', 'state_max'})
++
++
++@dataclass(frozen=True, slots=True)
++class StateVariable:
++    """One shared persistent integer state, range [0, levels-1]."""
++    name: str
++    levels: int
++    initial: int = 0
++    public: bool = True
++
++    def __post_init__(self):
++        if not isinstance(self.name, str) or not self.name.isidentifier():
++            raise ValueError('state name must be a valid identifier')
++        positive_integer(self.levels, 'levels')
++        if self.levels < 2:
++            raise ValueError('a state variable requires at least two levels')
++        if type(self.initial) is not int or not 0 <= self.initial < self.levels:
++            raise ValueError('initial state must lie within its declared levels')
++        if type(self.public) is not bool:
++            raise TypeError('public must be boolean')
++
++
++@dataclass(frozen=True, slots=True)
++class Predicate:
++    """A local-player predicate, optionally negated.
++
++    lag=1 refers to the immediately preceding joint action; current actions
++    are available to own_is/other_is/both_is/match/repeat/copy predicates.
++    """
++    kind: str
++    action: int | None = None
++    lag: int = 1
++    window: int = 1
++    count: int = 1
++    state: str | None = None
++    threshold: int = 0
++    negate: bool = False
++
++    def __post_init__(self):
++        if self.kind not in PREDICATES:
++            raise ValueError(f'unknown predicate: {self.kind!r}')
++        positive_integer(self.lag, 'lag')
++        positive_integer(self.window, 'window')
++        positive_integer(self.count, 'count')
++        if type(self.threshold) is not int:
++            raise TypeError('threshold must be an integer')
++        if type(self.negate) is not bool:
++            raise TypeError('negate must be boolean')
++
++
++@dataclass(frozen=True, slots=True)
++class RewardClause:
++    """Add a value to each player's reward if all predicates match locally."""
++    value: float
++    when: tuple[Predicate, ...] = ()
++
++    def __post_init__(self):
++        object.__setattr__(self, 'value', finite_reward(self.value))
++        object.__setattr__(self, 'when', _predicates(self.when))
++
++
++@dataclass(frozen=True, slots=True)
++class TransitionClause:
++    """Change one shared state if any/both local perspectives match.
++
++    Multiple matching changes are added simultaneously then clamped. Each
++    condition has an independent Bernoulli gate, with local environment RNG.
++    """
++    state: str
++    delta: int
++    when: tuple[Predicate, ...] = ()
++    scope: str = 'any'
++    probability: float = 1.0
++
++    def __post_init__(self):
++        if type(self.delta) is not int or self.delta == 0:
++            raise ValueError('delta must be a nonzero integer')
++        if self.scope not in ('any', 'both'):
++            raise ValueError('scope must be any or both')
++        probability = finite_reward(self.probability)
++        if not 0 <= probability <= 1:
++            raise ValueError('probability must lie within [0,1]')
++        object.__setattr__(self, 'probability', probability)
++        object.__setattr__(self, 'when', _predicates(self.when))
++
++
++def _predicates(items):
++    copied = tuple(items)
++    if any(not isinstance(p, Predicate) for p in copied):
++        raise TypeError('conditions must be Predicate instances')
++    return copied
++
++
++@dataclass(frozen=True, slots=True)
++class StructuredGame:
++    """Immutable compiled game specification; safe to share between trials.
++
++    `base` uses the original global (2,n,n,n,n) payoff axes. Additional
++    clauses use player-local predicates and a shared state, preserving
++    player-exchange symmetry when the base tensor is also symmetric.
++    """
++    n: int
++    memory_depth: int
++    base: RewardTensor
++    states: tuple[StateVariable, ...] = ()
++    rewards: tuple[RewardClause, ...] = ()
++    transitions: tuple[TransitionClause, ...] = ()
++    family: str = 'custom'
++    roles: tuple[int, ...] = ()
++    reward_scale: float = 1.0
++
++    def __post_init__(self):
++        n = validate_n(self.n)
++        positive_integer(self.memory_depth, 'memory_depth')
++        if not isinstance(self.base, RewardTensor) or self.base.n != n:
++            raise ValueError('base payoff must be a RewardTensor with matching n')
++        for name, cls in [('states', StateVariable), ('rewards', RewardClause),
++                          ('transitions', TransitionClause)]:
++            copied = tuple(getattr(self, name))
++            if any(not isinstance(item, cls) for item in copied):
++                raise TypeError(f'{name} must contain {cls.__name__}')
++            object.__setattr__(self, name, copied)
++        names = [s.name for s in self.states]
++        if len(set(names)) != len(names):
++            raise ValueError('state names must be unique')
++        roles = tuple(validate_action(a, n) for a in self.roles)
++        if len(set(roles)) != len(roles):
++            raise ValueError('action roles must be distinct')
++        object.__setattr__(self, 'roles', roles)
++        if not isinstance(self.family, str):
++            raise TypeError('family must be a string')
++        scale = finite_reward(self.reward_scale)
++        if scale <= 0:
++            raise ValueError('reward_scale must be positive')
++        object.__setattr__(self, 'reward_scale', scale)
++        by_name = {s.name: s for s in self.states}
++        for clause in (*self.rewards, *self.transitions):
++            if isinstance(clause, TransitionClause) and clause.state not in by_name:
++                raise ValueError('transition refers to unknown state')
++            for p in clause.when:
++                _validate_predicate(p, n, self.memory_depth, by_name)
++
++    def to_dict(self) -> dict[str, Any]:
++        return {
++            'version': 1, 'n': self.n, 'memory_depth': self.memory_depth,
++            'base_values': list(self.base.values),
++            'states': [asdict(s) for s in self.states],
++            'rewards': [asdict(r) for r in self.rewards],
++            'transitions': [asdict(t) for t in self.transitions],
++            'family': self.family, 'roles': list(self.roles),
++            'reward_scale': self.reward_scale,
++        }
++
++    @classmethod
++    def from_dict(cls, record: dict[str, Any]) -> StructuredGame:
++        if record.get('version') != 1:
++            raise ValueError('unsupported structured game version')
++        def conditions(items):
++            return tuple(Predicate(**p) for p in items)
++        return cls(
++            n=record['n'], memory_depth=record['memory_depth'],
++            base=RewardTensor(record['n'], record['base_values']),
++            states=tuple(StateVariable(**v) for v in record['states']),
++            rewards=tuple(RewardClause(value=r['value'], when=conditions(r['when']))
++                          for r in record['rewards']),
++            transitions=tuple(TransitionClause(state=t['state'], delta=t['delta'],
++                               when=conditions(t['when']), scope=t['scope'],
++                               probability=t['probability']) for t in record['transitions']),
++            family=record.get('family', 'custom'), roles=tuple(record.get('roles', ())),
++            reward_scale=record.get('reward_scale', 1.0),
++        )
++
++    def fingerprint(self) -> str:
++        blob = json.dumps(self.to_dict(), sort_keys=True, separators=(',', ':'), allow_nan=False)
++        return hashlib.sha256(blob.encode('utf-8')).hexdigest()
++
++    def legacy_tensor(self) -> RewardTensor:
++        """Exact round-trip, only for untouched Memory-One payoff games."""
++        if (self.memory_depth != 1 or self.states or self.rewards or
++                self.transitions or self.reward_scale != 1.0):
++            raise ValueError('extended rules cannot be represented by a legacy RewardTensor')
++        return self.base
++
++
++def _validate_predicate(p: Predicate, n: int, depth: int, states: dict[str, StateVariable]):
++    if p.kind in ACTION_PREDICATES:
++        validate_action(p.action, n)
++    elif p.action is not None:
++        raise ValueError(f'{p.kind} does not accept an action')
++    if p.kind in ('repeat', 'copy') and p.lag > depth:
++        raise ValueError('lag exceeds game memory depth')
++    if p.kind in COUNT_PREDICATES:
++        if p.window > depth or p.count > p.window:
++            raise ValueError('count/window exceed game memory depth')
++    if p.kind in STATE_PREDICATES:
++        if p.state not in states:
++            raise ValueError('predicate refers to unknown state')
++        if not 0 <= p.threshold < states[p.state].levels:
++            raise ValueError('state threshold is out of range')
++    elif p.state is not None:
++        raise ValueError(f'{p.kind} does not accept a state')
++
++
++def _check(p: Predicate, player: int, state: dict[str, int],
++           history: tuple[tuple[int, int], ...], actions: tuple[int, int]) -> bool:
++    own, other = actions[player], actions[1-player]
++    if p.kind == 'always':
++        yes = True
++    elif p.kind == 'own_is':
++        yes = own == p.action
++    elif p.kind == 'other_is':
++        yes = other == p.action
++    elif p.kind == 'both_is':
++        yes = own == other == p.action
++    elif p.kind == 'match':
++        yes = own == other
++    elif p.kind == 'repeat':
++        yes = own == history[p.lag - 1][player]
++    elif p.kind == 'copy':
++        yes = own == history[p.lag - 1][1-player]
++    elif p.kind == 'own_count':
++        yes = sum(h[player] == p.action for h in history[:p.window]) >= p.count
++    elif p.kind == 'other_count':
++        yes = sum(h[1-player] == p.action for h in history[:p.window]) >= p.count
++    elif p.kind == 'matching_count':
++        yes = sum(h[0] == h[1] for h in history[:p.window]) >= p.count
++    elif p.kind == 'state_min':
++        yes = state[p.state] >= p.threshold
++    elif p.kind == 'state_max':
++        yes = state[p.state] <= p.threshold
++    else:
++        raise RuntimeError('invalid compiled predicate')
++    return not yes if p.negate else yes
++
++
++def _matches(predicates: tuple[Predicate, ...], player: int, state,
++             history, actions) -> bool:
++    return all(_check(p, player, state, history, actions) for p in predicates)
++
++
++@dataclass(frozen=True, slots=True)
++class StructuredObservation(Observation):
++    """Legacy four fields remain intact; new fields may be ignored by old agents.
++
++    action_history: player-local (own, other) pairs, most recent first.
++    public_state: integers for visible variables; None for hidden variables.
++    """
++    public_state: tuple[int | None, ...] = ()
++    action_history: tuple[tuple[int, int], ...] = ()
++
++
++class StructuredEnv:
++    """Same reset/step interface as MemoryOneEnv, with persistent state."""
++    def __init__(self, rule: StructuredGame, *, max_steps: int):
++        if not isinstance(rule, StructuredGame):
++            raise TypeError('rule must be StructuredGame')
++        self._rule = rule
++        self._max_steps = positive_integer(max_steps, 'max_steps')
++        self._rng = random.Random()
++        self._history: tuple[tuple[int, int], ...] = ()
++        self._state: dict[str, int] = {}
++        self._elapsed = 0
++        self._active = False
++
++    @property
++    def n(self) -> int:
++        return self._rule.n
++
++    @property
++    def public_snapshot(self) -> tuple[int | None, ...]:
++        return tuple(self._state[v.name] if v.public else None for v in self._rule.states)
++
++    def _observations(self, rewards: tuple[float, float], start: bool):
++        prev = self._history[0]
++        public = self.public_snapshot
++        return tuple(StructuredObservation(
++            previous_own_action=prev[player],
++            previous_opponent_action=prev[1-player],
++            previous_own_reward=rewards[player], episode_start_flag=start,
++            public_state=public,
++            action_history=tuple((x[player], x[1-player]) for x in self._history),
++        ) for player in (0, 1))
++
++    def reset(self, *, seed: int | None = None, rule: StructuredGame | None = None):
++        validate_seed(seed)
++        if rule is not None:
++            if not isinstance(rule, StructuredGame):
++                raise TypeError('replacement rule must be StructuredGame')
++            if rule.n != self.n:
++                raise ValueError('replacement rule must have the same action count')
++        if seed is not None:
++            self._rng.seed(seed)
++        if rule is not None:
++            self._rule = rule
++        # The first pair matches MemoryOneEnv's seeded initial pair exactly.
++        self._history = tuple((self._rng.randrange(self.n), self._rng.randrange(self.n))
++                              for _ in range(self._rule.memory_depth))
++        self._state = {v.name: v.initial for v in self._rule.states}
++        self._elapsed = 0
++        self._active = True
++        return self._observations((0.0, 0.0), True)
++
++    def step(self, action_0: int, action_1: int) -> StepResult:
++        if not self._active:
++            raise RuntimeError('reset is required before stepping')
++        actions = (validate_action(action_0, self.n), validate_action(action_1, self.n))
++        previous = self._history[0]
++        old_state = dict(self._state)
++        base = self._rule.base
++        rewards = [base[player, *previous, *actions] for player in (0, 1)]
++        for clause in self._rule.rewards:
++            for player in (0, 1):
++                if _matches(clause.when, player, old_state, self._history, actions):
++                    rewards[player] += clause.value
++        deltas = {v.name: 0 for v in self._rule.states}
++        for clause in self._rule.transitions:
++            matches = [_matches(clause.when, p, old_state, self._history, actions)
++                       for p in (0, 1)]
++            fired = any(matches) if clause.scope == 'any' else all(matches)
++            if fired and (clause.probability == 1 or self._rng.random() < clause.probability):
++                deltas[clause.state] += clause.delta
++        self._state = {v.name: min(v.levels - 1, max(0, old_state[v.name] + deltas[v.name]))
++                       for v in self._rule.states}
++        self._history = (actions, *self._history[:self._rule.memory_depth-1])
++        self._elapsed += 1
++        truncated = self._elapsed == self._max_steps
++        self._active = not truncated
++        final_rewards = tuple(finite_reward(r * self._rule.reward_scale) for r in rewards)
++        return StepResult(self._observations(final_rewards, False),
++                          final_rewards, False, truncated)
++
++
++class StructuredQ(OnlineQ):
++    """Optional Q baseline that keys on observed state and bounded history.
++
++    Original OnlineQ still runs, but deliberately ignores these extra fields.
++    Hidden state variables are not leaked into this key.
++    """
++    def _key(self, observation):
++        if not isinstance(observation, StructuredObservation):
++            raise TypeError('StructuredQ expects StructuredObservation')
++        return (*super()._key(observation), observation.public_state,
++                observation.action_history)
++
++    def snapshot(self):
++        data = super().snapshot()
++        for row, key in zip(data['entries'], sorted(self._q)):
++            row['observation']['public_state'] = list(key[4])
++            row['observation']['action_history'] = [list(x) for x in key[5]]
++        return data
++
++
++def from_legacy(rule, *, family='legacy') -> StructuredGame:
++    """Wrap any RuleSpec/LogicalRule/RelationalRule/RewardTensor without changes."""
++    tensor = rule if isinstance(rule, RewardTensor) else compile_rule(rule)
++    return StructuredGame(tensor.n, 1, tensor, family=family)
++
++
++def _small_base(n: int, rng: random.Random) -> RewardTensor:
++    source = compile_rule(generate_rule(n=n, seed=rng.getrandbits(63), family='mixed'))
++    maximum = max((abs(value) for value in source.values), default=0)
++    factor = .25 / maximum if maximum else 0.0
++    return RewardTensor(n, (round(v * factor, 8) for v in source.values))
++
++
++def generate_structured_rule(*, n=3, memory_depth=3, seed=0, family='mixed',
++                             state_levels=(3, 3, 3), stochastic=False) -> StructuredGame:
++    """Generate a deterministic logical family; randomness is local to seed.
++
++    Each family creates an interpretable reward/transition mechanism, including
++    deliberately costly and immediately rewarding choices. Role names are
++    generator metadata; agents only see action numbers and observations.
++    """
++    n = validate_n(n)
++    positive_integer(memory_depth, 'memory_depth')
++    validate_seed(seed)
++    if n < 3:
++        raise ValueError('structured generator requires at least three distinct actions')
++    if family not in ('resource', 'sequence', 'reciprocity', 'mixed'):
++        raise ValueError('unknown family')
++    levels = tuple(state_levels)
++    if not 1 <= len(levels) <= 3:
++        raise ValueError('state_levels must contain between one and three sizes')
++    for value in levels:
++        positive_integer(value, 'state_levels entry')
++        if value < 2:
++            raise ValueError('state levels must be at least 2')
++    if type(stochastic) is not bool:
++        raise TypeError('stochastic must be boolean')
++    rng = random.Random(seed)
++    invest, harvest, signal = rng.sample(range(n), 3)
++    base = _small_base(n, rng)
++    r, t = [], []
++    variables = [StateVariable(name, count, 0, public=(i != 2))
++                 for i, (name, count) in enumerate(zip(('resource','progress','trust'), levels))]
++    if family == 'resource':
++        variables = variables[:1]
++    elif family == 'sequence':
++        variables = variables[:2] if len(variables) > 1 else variables[:1]
++    elif family == 'reciprocity':
++        variables = variables[:1]
++    as_pred = lambda name, threshold: Predicate('state_min', state=name, threshold=threshold)
++    want = lambda a: Predicate('own_is', action=a)
++    if family in ('resource', 'mixed'):
++        # Investment is costly; it creates a shared resource only if both invest.
++        t.append(TransitionClause('resource', +1, (want(invest),), 'both',
++                                  probability=.8 if stochastic else 1.0))
++        t.append(TransitionClause('resource', -1, (want(harvest),), 'any'))
++        r.append(RewardClause(-round(rng.uniform(.12,.35), 4), (want(invest),)))
++        r.append(RewardClause(round(rng.uniform(1.0,1.7),4),
++                              (want(harvest), as_pred('resource', 1))))
++        r.append(RewardClause(-round(rng.uniform(.1,.3),4),
++                              (want(harvest), Predicate('state_max', state='resource', threshold=0))))
++    if family in ('sequence','mixed'):
++        name = 'progress' if any(s.name == 'progress' for s in variables) else 'resource'
++        lag = min(memory_depth, 2)
++        t.append(TransitionClause(name, +1,
++                                  (want(invest), Predicate('repeat', lag=lag)),
++                                  'both'))
++        t.append(TransitionClause(name, -1, (want(harvest),), 'any'))
++        r.append(RewardClause(round(rng.uniform(.8,1.6),4),
++                              (want(harvest), as_pred(name, variables[[s.name for s in variables].index(name)].levels-1))))
++        r.append(RewardClause(-round(rng.uniform(.1,.25),4), (want(invest),)))
++    if family in ('reciprocity','mixed'):
++        name = 'trust' if any(s.name == 'trust' for s in variables) else 'resource'
++        t.append(TransitionClause(name, +1, (want(invest),), 'both'))
++        t.append(TransitionClause(name, -1, (want(harvest),), 'any'))
++        r.append(RewardClause(round(rng.uniform(.5,1.2),4),
++                              (want(invest), as_pred(name, 1))))
++        if memory_depth > 1:
++            r.append(RewardClause(round(rng.uniform(.3,.8),4),
++                                  (want(signal), Predicate('own_count', action=invest,
++                                    window=memory_depth, count=min(2,memory_depth)))))
++    # A nonuniform, seeded probing cost; it does not guarantee information gain.
++    r.append(RewardClause(-round(rng.uniform(.05,.2),4), (want(signal),)))
++    # A conservative global reward bound, independent of sampled trajectories.
++    # This preserves every within-game preference (positive uniform scaling).
++    bound = max(abs(v) for v in base.values) + sum(abs(c.value) for c in r)
++    scale = 1.0 / max(1.0, bound)
++    return StructuredGame(n, memory_depth, base, tuple(variables), tuple(r), tuple(t),
++                          family=family, roles=(invest,harvest,signal), reward_scale=scale)
++
++
++def generate_catalog(*, count: int, seed: int, n=3, memory_depth=3,
++                     families=('resource','sequence','reciprocity','mixed'),
++                     state_levels=(3,3,3), stochastic=False):
++    """Deterministic catalog without exact-serialization duplicates.
++
++    This is NOT canonical under action relabeling; a separate semantic or
++    best-response equivalence audit is needed for H1/H2 experiments.
++    """
++    positive_integer(count, 'count')
++    validate_seed(seed)
++    if not families:
++        raise ValueError('families cannot be empty')
++    rng = random.Random(seed)
++    seen = set()
++    games = []
++    for i in range(count):
++        for _ in range(10000):
++            game = generate_structured_rule(n=n, memory_depth=memory_depth,
++                seed=rng.getrandbits(63), family=families[i % len(families)],
++                state_levels=state_levels, stochastic=stochastic)
++            digest = game.fingerprint()
++            if digest not in seen:
++                seen.add(digest)
++                games.append(game)
++                break
++        else:
++            raise RuntimeError('not enough distinct games for requested catalog')
++    return tuple(games)
++
++
++def _main():
++    parser = argparse.ArgumentParser(description='Structured procedural game demo')
++    parser.add_argument('--n', type=int, default=3)
++    parser.add_argument('--seed', type=int, default=17)
++    parser.add_argument('--depth', type=int, default=3)
++    parser.add_argument('--steps', type=int, default=30)
++    parser.add_argument('--family', choices=('resource','sequence','reciprocity','mixed'), default='mixed')
++    parser.add_argument('--stochastic', action='store_true')
++    parser.add_argument('--output', help='Optional reproducible game specification JSON')
++    args = parser.parse_args()
++    game = generate_structured_rule(n=args.n, seed=args.seed, memory_depth=args.depth,
++                                    family=args.family, stochastic=args.stochastic)
++    if args.output:
++        from pathlib import Path
++        Path(args.output).write_text(json.dumps(game.to_dict(), indent=2), encoding='utf-8')
++    env = StructuredEnv(game, max_steps=args.steps)
++    obs = env.reset(seed=args.seed)
++    rng = random.Random(args.seed + 1)
++    trace, totals = [], [0.0, 0.0]
++    for tick in range(args.steps):
++        actions = (rng.randrange(args.n), rng.randrange(args.n))
++        result = env.step(*actions)
++        totals = [totals[i]+result.rewards[i] for i in (0,1)]
++        if tick < 12:
++            trace.append({'turn': tick+1, 'actions': actions,
++                          'rewards': result.rewards,
++                          'public_state': result.observations[0].public_state,
++                          'action_history': result.observations[0].action_history})
++        obs = result.observations
++    print(json.dumps({'fingerprint': game.fingerprint(), 'n': game.n,
++                      'memory_depth': game.memory_depth, 'family': game.family,
++                      'state_names': [v.name for v in game.states],
++                      'action_roles': game.roles, 'total_rewards': totals,
++                      'trace': trace}, indent=2))
++
++
++if __name__ == '__main__':
++    _main()
+diff --git a/STRUCTURED_GAMES.md b/STRUCTURED_GAMES.md
+new file mode 100644
+index 0000000..0237b19
+--- /dev/null
++++ b/STRUCTURED_GAMES.md
+@@ -0,0 +1,165 @@
++# Structured finite-state games — optional MAMRL extension
++
++This extension generates **executable**, seeded two-player games with bounded
++joint-action history and persistent finite state. It keeps existing
++`RewardTensor`, `RuleSpec`, `MemoryOneEnv`, and D-031 game definitions intact.
++It is a game-generator/rollout extension, **not a validated new Meta-RL result**.
++
++## Install
++
++From the repository root, apply the supplied patch:
++
++```bash
++git apply --check structured_games.patch
++git apply structured_games.patch
++```
++
++The patch adds `05_toy_models/mamrl/structured_games.py` and
++`tests/test_structured_games.py`, and makes a three-line compatibility change
++to `05_toy_models/mamrl/meta_exploration_rollout.py`. Existing old-game code paths
++retain their behavior.
++
++## Quick start
++
++```bash
++PYTHONPATH=05_toy_models python -m mamrl.structured_games \
++  --n 3 --depth 3 --family mixed --seed 17 --steps 32 \
++  --output /tmp/example_structured_game.json
++
++PYTHONPATH=05_toy_models python -m unittest \
++  discover -s tests -p 'test_structured_games.py' -v
++```
++
++Programmatic usage:
++
++```python
++from mamrl.structured_games import (
++    StructuredEnv, StructuredGame, StructuredQ,
++    generate_structured_rule, generate_catalog, from_legacy,
++)
++from mamrl.rollout import run_episode
++from mamrl.policy import RandomPolicy
++
++spec = generate_structured_rule(
++    n=4, memory_depth=3, seed=42, family='mixed',
++    state_levels=(3, 4, 3), stochastic=True,
++)
++assert StructuredGame.from_dict(spec.to_dict()) == spec
++
++result = run_episode(
++    StructuredEnv(spec, max_steps=80),
++    (RandomPolicy(), RandomPolicy()),
++    seed=5, policy_seeds=(10, 11),
++)
++print(result.total_rewards)
++
++# Persistent state is available to the simulator; only public variables
++# enter policy observations. Hidden variables are never sent to agents.
++obs = result.transitions[-1].next_observations[0]
++print(obs.public_state, obs.action_history)
++
++catalog = generate_catalog(count=16, seed=9, memory_depth=3)
++print([(game.family, game.fingerprint()) for game in catalog])
++```
++
++A legacy rule remains exactly the same payoff function:
++
++```python
++from mamrl.rules import generate_rule
++legacy = from_legacy(generate_rule(n=3,seed=7))
++assert legacy.legacy_tensor().n == 3
++```
++
++## Meta-exploration compatibility
++
++After applying the compatibility patch, the existing teacher factory and
++unbatched rollout can accept a `StructuredGame` directly:
++
++```python
++from mamrl.structured_games import generate_structured_rule
++from mamrl.meta_exploration import RandomExplorer
++from mamrl.meta_exploration_rollout import run_meta_trial
++
++spec = generate_structured_rule(seed=17,memory_depth=3)
++trial = run_meta_trial(spec,RandomExplorer,seed=91,steps=12,
++                       assessment_steps=24,opponent_profile='sarsa')
++print(trial['meta_reward'],trial['assessment_mean'])
++```
++
++`meta_batch.collect_batch` also accepts `(StructuredGame, seed, profile)` jobs.
++Existing `OnlineQ` and `ContextActor` run through this interface but **ignore
++`public_state` and the added `action_history` fields**. For a state-aware
++Q baseline, use `StructuredQ`, which keys on the observed state/history and
++retains the original Q-learning update method. This is *not* automatically
++plugged into D-031 training. The existing `experiment/` panel builder and
++training entry decoder still accept the legacy relational rule schema; a new
++experiment protocol/manifest and appropriately state-aware models are needed
++before drawing research conclusions with these games.
++
++The patched legacy meta trial **resets persistent environment state at the
++exploration/assessment boundary** (a reset-state transfer measurement). For
++continuous adaptation, a separate continuous-state evaluation protocol is
++required. The `StructuredEnv` itself maintains state **within** each episode.
++
++## Defined semantics
++
++For joint actions `(a,b)`, previous action history `h` (most recent first),
++and old shared state `s`, the executable game is:
++
++```text
++reward_i = scale * (
++    base[i, previous_a, previous_b, a, b]
++    + sum(clause.value for each locally matched reward clause)
++)
++
++new_state_j = clamp(
++    old_state_j + sum(matching transition deltas),
++    0, variable.levels - 1
++)
++```
++
++All clauses read the **old** state/history and the **current** simultaneous
++joint action. Transition deltas are combined before clipping. Stochastic
++transition gates use the environment's local seeded RNG. Generated rewards
++are conservatively scaled to [-1, 1] for every possible state/history; this
++uniform positive scaling does not change the preference ordering *within*
++a game. `from_legacy` preserves the original tensor without scaling.
++
++Observations extend the existing frozen `Observation` dataclass with:
++
++- `public_state`: one value per state variable, or `None` if hidden;
++- `action_history`: at most `memory_depth` previous joint actions in the
++  **player's own perspective**, most recent first.
++
++The four existing observation fields and the `StepResult` layout are unchanged.
++At episode reset, persistent state returns to configured initial values and
++the history is initialized with seeded random joint actions. The current game
++rule is fixed within an episode; `reset(rule=...)` permits changing it between
++episodes when the action count is unchanged.
++
++The generator has four motifs: `resource`, `sequence`, `reciprocity`, and
++`mixed`. Role assignments and payoff coefficients vary by seed. The `mixed`
++family combines investment/harvest state transitions, a multi-step sequence,
++and an occasionally hidden trust variable. Parameters, actions, memory depth,
++state capacities, and transition stochasticity are configurable. Rules are
++sampled once, then executed deterministically except for explicitly declared
++stochastic transition gates.
++
++## Scope and limitations
++
++- Catalog uniqueness is checked with **exact serialized fingerprints**, not
++  action-relabeling-invariant game equivalence or strategic equivalence.
++  For H1/H2 studies, separately audit payoff, transition, strategic, and
++  relabeling equivalences *before* exposing held-out results.
++- The generator is a controlled set of templates, not a proof of active
++  information value. Measure information-gathering costs and strategic
++  differentiation for each experimental distribution.
++- A larger `memory_depth` does not automatically imply longer effective
++  dependence: inspect which predicates are sampled and which states are
++  reachable. A state-aware learner may face a much larger key space.
++- Public state and player history are visible to new-aware agents, but old
++  teacher/student modules see only the original four fields. For research
++  on partially observable adaptation, explicitly specify which fields the
++  model can use.
++- The package uses only Python's standard library **plus the existing MAMRL
++  core**. Neural meta training still requires PyTorch as before.
+diff --git a/tests/test_structured_games.py b/tests/test_structured_games.py
+new file mode 100644
+index 0000000..28f1836
+--- /dev/null
++++ b/tests/test_structured_games.py
+@@ -0,0 +1,283 @@
++"""Independent contracts for the optional structured-game extension."""
++from __future__ import annotations
++
++from dataclasses import FrozenInstanceError
++import json
++import os
++import random
++import subprocess
++import sys
++import unittest
++
++from mamrl.adaptive_agents import OnlineQ
++from mamrl.environment import MemoryOneEnv, Observation
++from mamrl.policy import RandomPolicy
++from mamrl.rollout import run_episode
++from mamrl.rules import RuleSpec, RuleTerm, compile_rule
++from mamrl.structured_games import (
++    Predicate, RewardClause, StateVariable, StructuredEnv, StructuredGame,
++    StructuredObservation, StructuredQ, TransitionClause,
++    from_legacy, generate_catalog, generate_structured_rule,
++)
++from mamrl.tensor import RewardTensor
++
++
++def zero(n=3):
++    return RewardTensor(n, (0 for _ in range(2*n**4)))
++
++
++class LegacyCompatibility(unittest.TestCase):
++    def test_wrap_legacy_tensor_exact_rewards_and_observations(self):
++        source = RuleSpec(3, (RuleTerm('coordination', 2), RuleTerm('copy_opponent', -1)))
++        tensor = compile_rule(source)
++        for original in (tensor, source):
++            game = from_legacy(original)
++            self.assertEqual(game.legacy_tensor(), tensor)
++            standard = MemoryOneEnv(tensor, max_steps=9)
++            extended = StructuredEnv(game, max_steps=9)
++            for seed in (0, 41, 829):
++                old = standard.reset(seed=seed)
++                new = extended.reset(seed=seed)
++                for a, b in zip(old, new):
++                    self.assertEqual((a.previous_own_action, a.previous_opponent_action,
++                                      a.previous_own_reward, a.episode_start_flag),
++                                     (b.previous_own_action, b.previous_opponent_action,
++                                      b.previous_own_reward, b.episode_start_flag))
++                actions = [(i % 3, (2 * i + 1) % 3) for i in range(9)]
++                for a,b in actions:
++                    result_a, result_b = standard.step(a,b), extended.step(a,b)
++                    self.assertEqual(result_a.rewards, result_b.rewards)
++                    self.assertEqual(result_a.truncated, result_b.truncated)
++                    for x, y in zip(result_a.observations, result_b.observations):
++                        self.assertEqual((x.previous_own_action, x.previous_opponent_action,
++                                          x.previous_own_reward, x.episode_start_flag),
++                                         (y.previous_own_action, y.previous_opponent_action,
++                                          y.previous_own_reward, y.episode_start_flag))
++
++    def test_existing_runner_and_random_policy_work(self):
++        env = StructuredEnv(generate_structured_rule(seed=29), max_steps=24)
++        result = run_episode(env, (RandomPolicy(), RandomPolicy()),
++                             seed=83, policy_seeds=(9,10))
++        self.assertEqual(len(result.transitions), 24)
++        self.assertTrue(result.transitions[-1].truncated)
++        self.assertTrue(isinstance(result.transitions[0].observations[0], Observation))
++        for p in (0,1):
++            self.assertAlmostEqual(result.total_rewards[p],
++                sum(t.rewards[p] for t in result.transitions), places=10)
++
++
++    def test_meta_rollout_compatibility_with_legacy_rules_and_new_games(self):
++        from mamrl.meta_exploration import RandomExplorer
++        from mamrl.meta_exploration_rollout import run_meta_trial
++        source = RuleSpec(3, (RuleTerm('coordination', 2),))
++        old = run_meta_trial(source, RandomExplorer, seed=87, steps=5,
++                             assessment_steps=7, opponent_profile='sarsa')
++        new = run_meta_trial(from_legacy(source), RandomExplorer, seed=87, steps=5,
++                             assessment_steps=7, opponent_profile='sarsa')
++        for field in ('exploration_mean', 'assessment_mean', 'meta_reward',
++                      'erased_mean', 'gameplay_mean'):
++            self.assertEqual(old[field], new[field])
++        game = generate_structured_rule(seed=15,memory_depth=3)
++        extended = run_meta_trial(game, RandomExplorer, seed=87, steps=5,
++                                  assessment_steps=7, opponent_profile='sarsa')
++        self.assertEqual(len(extended['exploration']),5)
++        self.assertEqual(len(extended['assessment']),7)
++        self.assertIn('public_state', extended['exploration'][0]['observations'][0])
++        self.assertEqual(extended['environment_steps_with_control'],19)
++
++    def test_batched_ppo_teacher_path_accepts_structured_rules(self):
++        try:
++            from mamrl.action_set import ActionSetActorCritic
++            from mamrl.meta_batch import collect_batch, replay_batch
++        except ImportError:
++            self.skipTest('PyTorch not installed')
++        game=generate_structured_rule(seed=10,memory_depth=3)
++        policy=ActionSetActorCritic(hidden_size=8,seed=11)
++        batch=collect_batch(policy,[(game,121,'steady'),(game,122,'sarsa')],
++                            steps=4,assessment_steps=6)
++        self.assertEqual(len(batch),2)
++        self.assertEqual(len(batch[0].actions),4)
++        self.assertEqual(tuple(x.numel() for x in replay_batch(policy,batch)),(8,8,8))
++
++    def test_original_online_q_and_extended_q_use_same_observation_contract(self):
++        game = generate_structured_rule(seed=91)
++        env = StructuredEnv(game, max_steps=5)
++        obs = env.reset(seed=9)[0]
++        legacy_student = OnlineQ(game.n, seed=1)
++        aware_student = StructuredQ(game.n, seed=1)
++        self.assertEqual(len(legacy_student._key(obs)), 4)
++        self.assertEqual(len(aware_student._key(obs)), 6)
++        out = env.step(0,1)
++        for student in (legacy_student, aware_student):
++            student.update(obs, 0, out.rewards[0], out.observations[0])
++            self.assertEqual(student.updates, 1)
++            self.assertEqual(student.snapshot()['entries'][0]['values'][0],
++                             student.values(obs)[0])
++        self.assertIn('public_state', aware_student.snapshot()['entries'][0]['observation'])
++        self.assertEqual(aware_student.clone().snapshot(), aware_student.snapshot())
++
++
++class StateAndTimeContracts(unittest.TestCase):
++    def test_reward_and_transition_are_applied_from_old_state(self):
++        game = StructuredGame(
++            n=3, memory_depth=1, base=zero(),
++            states=(StateVariable('resource',3),),
++            rewards=(RewardClause(5, (Predicate('own_is',action=1),
++                                     Predicate('state_min', state='resource',threshold=1))),),
++            transitions=(TransitionClause('resource',1,(Predicate('own_is',action=0),),scope='both'),
++                         TransitionClause('resource',-1,(Predicate('own_is',action=1),),scope='any')),
++        )
++        env = StructuredEnv(game,max_steps=4)
++        env.reset(seed=2)
++        self.assertEqual(env.step(0,0).rewards, (0,0))
++        self.assertEqual(env.public_snapshot, (1,))
++        self.assertEqual(env.step(1,2).rewards, (5,0))
++        self.assertEqual(env.public_snapshot, (0,))
++        self.assertEqual(env.step(1,1).rewards, (0,0))
++        self.assertEqual(env.public_snapshot, (0,))
++        self.assertFalse(env.step(0,2).terminated)
++        with self.assertRaises(RuntimeError):
++            env.step(0,0)
++
++    def test_two_step_memory_changes_rewards_with_same_last_pair(self):
++        game = StructuredGame(
++            n=3, memory_depth=2, base=zero(),
++            rewards=(RewardClause(7,(Predicate('own_count',action=1,window=2,count=2),)),),
++        )
++        # Two trajectories end with the same immediate previous pair but
++        # different second-to-last pair. Reward on next action must differ.
++        a, b = StructuredEnv(game,max_steps=4), StructuredEnv(game,max_steps=4)
++        a.reset(seed=4); b.reset(seed=4)
++        a.step(1,0); b.step(2,0)
++        a.step(1,0); b.step(1,0)
++        self.assertEqual(a.step(0,0).rewards[0], 7)
++        self.assertEqual(b.step(0,0).rewards[0], 0)
++
++    def test_hidden_state_remains_private_and_visible_state_is_public(self):
++        game = StructuredGame(
++            n=3, memory_depth=1, base=zero(),
++            states=(StateVariable('visible',2), StateVariable('hidden',2,public=False)),
++            transitions=(TransitionClause('hidden',1,(Predicate('own_is',action=1),),scope='any'),),
++            rewards=(RewardClause(4,(Predicate('state_min',state='hidden',threshold=1),)),),
++        )
++        env = StructuredEnv(game,max_steps=4)
++        first = env.reset(seed=1)
++        self.assertEqual(first[0].public_state, (0, None))
++        second = env.step(1,0)
++        self.assertEqual(second.rewards, (0,0))
++        self.assertEqual(second.observations[0].public_state, (0,None))
++        self.assertEqual(env.step(2,0).rewards, (4,4))
++
++    def test_player_exchange_symmetry(self):
++        game = generate_structured_rule(n=4,seed=7,memory_depth=3,family='mixed')
++        a,b = StructuredEnv(game,max_steps=10), StructuredEnv(game,max_steps=10)
++        a.reset(seed=8); b.reset(seed=8)
++        # Exchange all player-indexed information, not just current actions.
++        b._history = tuple((y,x) for x,y in a._history)
++        actions = ((1,2),(0,3),(2,2),(0,1),(3,2),(0,0))
++        for x,y in actions:
++            ra, rb = a.step(x,y), b.step(y,x)
++            self.assertAlmostEqual(ra.rewards[0], rb.rewards[1])
++            self.assertAlmostEqual(ra.rewards[1], rb.rewards[0])
++            self.assertEqual(a._state,b._state)
++            self.assertEqual(ra.observations[0].public_state,
++                             rb.observations[1].public_state)
++
++    def test_generated_games_change_real_state(self):
++        game = generate_structured_rule(seed=2, family='mixed')
++        env = StructuredEnv(game, max_steps=8)
++        env.reset(seed=6)
++        invest, harvest, _ = game.roles
++        for _ in range(4):
++            env.step(invest, invest)
++        self.assertGreater(env._state['resource'], 0)
++        self.assertGreater(env._state['progress'], 0)
++        before = env._state['resource']
++        env.step(harvest, harvest)
++        self.assertLess(env._state['resource'], before)
++
++
++    def test_stochastic_transitions_reproduce_under_fixed_seed(self):
++        game=generate_structured_rule(seed=12,family='resource',stochastic=True)
++        x,y=StructuredEnv(game,max_steps=24),StructuredEnv(game,max_steps=24)
++        self.assertEqual(x.reset(seed=91),y.reset(seed=91))
++        invest, harvest, _=game.roles
++        sequence=[(invest,invest)]*15 + [(harvest,harvest)]*9
++        for a,b in sequence:
++            self.assertEqual(x.step(a,b),y.step(a,b))
++        self.assertEqual(x.public_snapshot,y.public_snapshot)
++
++    def test_atomic_bad_actions(self):
++        game = generate_structured_rule(seed=4,stochastic=True)
++        for invalid in (-1,True,3,'0'):
++            left = StructuredEnv(game,max_steps=2)
++            right = StructuredEnv(game,max_steps=2)
++            left.reset(seed=17);right.reset(seed=17)
++            with self.assertRaises((TypeError,ValueError)):
++                left.step(0,invalid)
++            self.assertEqual(left.step(0,1),right.step(0,1))
++
++
++class GenerationContracts(unittest.TestCase):
++    def test_families_are_deterministic_and_rules_have_dynamic_state(self):
++        before = random.getstate()
++        for family in ('resource','sequence','reciprocity','mixed'):
++            for n in (3,4,5):
++                a = generate_structured_rule(n=n,seed=17,memory_depth=3,family=family,
++                                             stochastic=True)
++                b = generate_structured_rule(n=n,seed=17,memory_depth=3,family=family,
++                                             stochastic=True)
++                self.assertEqual(a,b)
++                self.assertTrue(a.transitions)
++                self.assertTrue(a.rewards)
++                self.assertEqual(a.fingerprint(),b.fingerprint())
++                self.assertEqual(a,StructuredGame.from_dict(json.loads(json.dumps(a.to_dict()))))
++                # Generator bounds all rewards in [-1, 1] for every reachable state.
++                env=StructuredEnv(a,max_steps=12)
++                env.reset(seed=3)
++                for _ in range(12):
++                    outcome=env.step(0,1)
++                    self.assertLessEqual(max(map(abs,outcome.rewards)),1.000000001)
++        self.assertEqual(before, random.getstate())
++
++    def test_catalog_is_reproducible_and_exact_duplicates_excluded(self):
++        a=generate_catalog(count=16,seed=18,n=3,memory_depth=3)
++        b=generate_catalog(count=16,seed=18,n=3,memory_depth=3)
++        self.assertEqual(a,b)
++        self.assertEqual(len({x.fingerprint() for x in a}),16)
++        self.assertEqual({x.family for x in a},{'resource','sequence','reciprocity','mixed'})
++
++    def test_invalid_specs_rejected(self):
++        with self.assertRaises(ValueError):
++            StructuredGame(3,1,zero(),rewards=(RewardClause(1,(Predicate('repeat',lag=2),)),))
++        with self.assertRaises(ValueError):
++            StructuredGame(3,1,zero(),rewards=(RewardClause(1,(Predicate('state_min',state='x'),)),))
++        with self.assertRaises(ValueError):
++            StructuredGame(3,1,zero(),transitions=(TransitionClause('x',1),))
++        with self.assertRaises(ValueError):
++            StructuredGame(3,1,zero(),rewards=(RewardClause(1,(Predicate('own_is',action=3),)),))
++        with self.assertRaises(ValueError):
++            StructuredGame(3,1,zero(),rewards=(RewardClause(1,(Predicate('matching_count',window=2),)),))
++        with self.assertRaises(ValueError):
++            generate_structured_rule(n=2)
++        with self.assertRaises(ValueError):
++            generate_structured_rule(seed=0,state_levels=(1,))
++        with self.assertRaises(ValueError):
++            StructuredGame.from_dict({'version':99})
++
++    def test_determinism_across_python_hash_seeds(self):
++        script = ("from mamrl.structured_games import generate_structured_rule; "
++                  "print(generate_structured_rule(seed=19,stochastic=True).fingerprint())")
++        outputs=[]
++        for hash_seed in ('4','888'):
++            env=dict(os.environ,PYTHONHASHSEED=hash_seed)
++            outputs.append(subprocess.check_output([sys.executable,'-c',script],env=env,text=True))
++        self.assertEqual(outputs[0],outputs[1])
++
++    def test_memory_one_adapter_rejects_invalid_downcast(self):
++        with self.assertRaises(ValueError):
++            generate_structured_rule(seed=0).legacy_tensor()
++
++
++if __name__=='__main__':
++    unittest.main()

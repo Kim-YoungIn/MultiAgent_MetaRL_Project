@@ -1,0 +1,15 @@
+{
+  "primary": {
+    "contrast": "meta_adapt minus pooled_adapt, n=6 L=5 k=8",
+    "estimate": 0.003759460365071331,
+    "interval_95": [
+      0.0007119375730663263,
+      0.007017126378296369
+    ]
+  },
+  "blocks": 16,
+  "test_games_per_setting_per_block": 24,
+  "seconds": 14.75376664799478,
+  "probe_opponent_q_change": 0.4029125631717745,
+  "deployment_opponent_q_change": 0.6209858982497212
+}

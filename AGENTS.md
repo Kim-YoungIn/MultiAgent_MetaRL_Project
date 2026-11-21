@@ -1,24 +1,32 @@
-# MAMRL — AGENTS.md
+# Multi-Agent Meta-Learning Research — Agent Guidance
 
-이 저장소는 Multi-Agent Meta-RL의 Exploration·Adaptation 연구 공간이다. 현재의 연구 기준은 `00_management/Project_Baseline.md`를 따른다.
+This repository investigates **how meta-learning affects agents' ability to adapt in multi-agent environments**. The objective is to produce a theoretically justified, empirically informative, and reproducible study—not to preserve a particular architecture or improve a preselected score.
 
-## 기준과 자료
+## Research orientation
 
-- `00_management/Project_Baseline.md`: 연구 목적(FIXED)과 현재 작업 가정(CURRENT).
-- `00_management/Decisions.md`, `Open_Questions.md`: 결정 기록과 미해결 문제.
-- `04_design/`: 해당 작업의 인터페이스와 작업 명세.
-- `01_originals/`: 원래 제안서 및 평가 지침. `02_references/`, `03_ideas/`: 참고 및 미채택 후보.
+- Start from the scientific question, not the existing implementation. Define what constitutes a task, an opponent, adaptation, generalization, and a valid causal or comparative claim before committing to methods.
+- The historical questions are **H1**, how training-game and opponent diversity affects adaptation to unseen tasks, and **H2**, whether reusable structure across games explains transfer. H1 was prioritized, with H2 contingent on the evidence. Both formulations can be criticized or refined; neither prescribes an algorithm.
+- The original interest in learned exploration is important context, **not a requirement for a separate exploration policy**. Do not silently replace adaptation research with opponent shaping or another neighboring topic.
+- Treat `01_originals/` as the original proposal and course requirements; `00_management/`, `04_design/`, `05_toy_models/`, `experiment/`, and past `runs/` as historical decisions, implementations, and evidence. Their labels such as FIXED describe previous experiment contracts, not permanent restrictions on new research. Preserve the reproducibility of those historical experiments.
 
-현재 과제에 필요한 문서와 코드만 확인한다. 아이디어, 참고 논문, 에이전트의 제안을 자동으로 채택하지 않는다.
+## Independent, ambitious design
 
-## 실행과 검증
+- Explore **fundamentally different formulations and architectures**, including approaches beyond the repository's current examples. Teacher–Student decomposition, recurrent meta-agents, learned optimizers, inference-based adaptation, PPO, Q-learning, Memory-One reward tensors, fixed within-task rules, and D-031 are all **optional choices**.
+- Use current literature, theory, and appropriate computational tools to compare candidates in terms of expressive power, adaptation mechanism, information use, learning signal, strategic interaction, identification, compute cost, and the strength of conclusions they permit.
+- Be willing to replace the environment, learning algorithm, experiment protocol, or substantial parts of the codebase if a stronger research design warrants it. Neither incremental patching nor wholesale rewriting is a goal in itself.
+- Scale experiments when justified. Existing values for model size, action count, number of games or opponents, training updates, seeds, horizons, and hardware are **not research limits**. Extend the runner, configuration, batching, parallelism, checkpointing, or analysis pipeline where needed; do not claim unsupported functionality already exists.
 
-- 요청된 목표를 구현·실행·검증까지 수행한다. 작은 구현 세부는 자율적으로 결정한다.
-- 보상, 관측, 상태 전이, task/episode 경계, 학습·평가 조건 등 연구 해석을 바꾸는 선택은 현행 결정을 확인하고, 필요한 새 결정을 분리한다.
-- 메인 에이전트가 작업 범위, 통합, 결과의 정확성을 책임진다. Subagent는 독립 검증이나 실제로 분리 가능한 작업에 선택적으로 사용한다. 동일 파일을 병렬 수정하지 않는다.
-- 검증은 가능한 한 구현 자체가 아니라 계약과 예상 결과를 기준으로 수행한다. 실행하지 않은 검증을 통과했다고 보고하지 않는다.
-- 채택된 변경에 한해 관련 기준 문서를 갱신한다. 결과 보고는 변경, 검증 증거, 남은 결정만 정리한다.
+## Scientific and engineering integrity
 
-## 외부 아이디어
+- Distinguish meta-learning effects from stronger priors, extra exposure, additional optimization, opponent dynamics, and evaluation leakage. Compare reasonable alternatives, not only weak baselines. Measure early performance, adaptation as experience accumulates, total costs, and failure conditions.
+- Separate exploration of hypotheses and design from **precommitted final evaluations**. Never silently overwrite completed experiments or reinterpret opened test sets as untouched. Record substantial redesigns under a new version or protocol.
+- Implement, run, and independently validate work wherever feasible. Tests passing, a model training, and a research hypothesis being supported are different claims. Preserve null and negative results; report failures and incomplete runs explicitly.
+- Use the available capable models, tools, and subagents deliberately for independent scientific critique, focused implementation, and validation. Keep one owner for conflicting edits; assess evidence rather than agent agreement.
 
-별도 ChatGPT 대화와 이 저장소는 자동 동기화되지 않는다. 사용자가 직접 전달한 메모만 검토하며, 명시적인 적용 승인 없이는 새로운 요구사항으로 취급하지 않는다. 전달 방식은 `00_management/sessions/05_external_idea_intake.md`를 따른다.
+## Session continuity and documentation
+
+- **Read `PROGRESS.md` at session start** alongside only the sources relevant to the task. Treat it as a compact navigation aid, not an authority overriding code, data, user instructions, or source documents.
+- **Create `PROGRESS.md` if missing; update it after meaningful milestones and before ending a work session.** Replace obsolete status rather than appending a diary. Keep it concise (normally 15–30 lines): current objective and stage, completed work with evidence, active decisions and assumptions, blockers or unresolved issues, and the next actionable step. Include paths/commit IDs as useful; never mark unrun tests or experiments complete.
+- Keep `README.md` focused on research scope, actual capabilities, reproduction, and extensibility. Update other management documents only when their current purpose requires it; avoid redundant logs, excessive instructions, and documentation growth that crowds out research.
+
+**Success criterion:** a defensible, falsifiable, and reproducible account of when and why meta-learning improves—or fails to improve—adaptation in multi-agent settings.

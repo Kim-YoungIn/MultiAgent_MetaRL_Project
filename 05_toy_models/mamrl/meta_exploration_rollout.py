@@ -16,6 +16,7 @@ from .common import positive_integer, validate_action, validate_seed
 from .environment import MemoryOneEnv
 from .rules import compile_rule
 from .tensor import RewardTensor
+from .structured_games import StructuredGame, StructuredEnv
 
 
 OPPONENT_PROFILES = {
@@ -33,7 +34,7 @@ OPPONENT_SUITES = {
 
 
 def _make_env(tensor, steps, seed):
-    env = MemoryOneEnv(tensor, max_steps=steps)
+    env = StructuredEnv(tensor, max_steps=steps) if isinstance(tensor, StructuredGame) else MemoryOneEnv(tensor, max_steps=steps)
     return env, env.reset(seed=seed)
 
 
@@ -81,7 +82,7 @@ def meta_trial_stream(rule, *, seed, steps=12, opponent_profile='steady', assess
         raise TypeError('trial requires an explicit seed')
     if opponent_profile not in OPPONENT_PROFILES:
         raise ValueError('unknown opponent profile')
-    tensor = rule if isinstance(rule, RewardTensor) else compile_rule(rule)
+    tensor = rule if isinstance(rule, (RewardTensor, StructuredGame)) else compile_rule(rule)
     seed_rng = random.Random(seed)
     names = ('teacher', 'student', 'opponent', 'exploration_reset', 'assessment_reset')
     seeds = {name:seed_rng.getrandbits(63) for name in names}

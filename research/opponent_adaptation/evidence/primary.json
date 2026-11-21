@@ -1,0 +1,17 @@
+{
+  "blocks": 24,
+  "primary": [
+    {
+      "name": "meta_minus_pooled_learning",
+      "estimate": -0.0001542972787354548,
+      "lower": -0.003124455850950844,
+      "upper": 0.002712384321420169
+    },
+    {
+      "name": "opponent_moderation_of_extra_adaptation",
+      "estimate": 0.0001310820505146373,
+      "lower": -0.0039040644130388063,
+      "upper": 0.004234688126729633
+    }
+  ]
+}

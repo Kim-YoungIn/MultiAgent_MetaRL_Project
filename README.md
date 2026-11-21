@@ -6,6 +6,11 @@ Research repository for investigating **how meta-learning affects agents' adapta
 
 ## Completed adaptation experiments
 
+**Rule similarity and adaptation.** Compare nearest training-game similarity with paired adaptation gains in D-031 and in 3,072 structured test games. The historical full-budget continuation and its offline source restoration are tracked separately. [Similarity report](research/rule_similarity/REPORT.md) · [D-031 continuation](research/d031_completion/README.md)
+
+**Direct comparison against a learning counterpart.** Across 3,072 fresh structured games, updating from eight interactions raised payoff for both the meta-trained and conventionally pretrained agents. Their absolute difference against the updating opponent was −0.00015, with a 97.5% interval of [−0.00312, +0.00271]. The paired test also found no resolved change in their relative update benefit when the counterpart's own learning was enabled. Ordinary pretraining yielded higher descriptive 24-turn deployment return. [Research report, data and reproduction](research/opponent_adaptation/REPORT.md)
+
+
 A learned opponent prior improved decisions in an unvisited arena after four observations when incentives were correlated across arenas. The same prior hurt when that correlation reversed. In the supplied structured-game extension, a scratch learner gained more over the first eight probes than the learned reward prior. A fresh cross-size experiment found a small eight-probe advantage over pooled pretraining when transferring from three to six actions. [Integrated report and figures](research/REPORT.md)
 
 The new studies use independent training catalogs, common-history queries against a continuing learning opponent, and separate live deployments. The extension experiments run the actual resource, sequence, reciprocity and mixed games. A two-turn exact decision calculation measures the value of observing reward and the cost of forcing a greedy opening. [Reproduction and raw-data guide](research/REPRODUCE.md) · [Architecture comparison](research/adapt_v1/DESIGN_REVIEW.md) · [D-031 evidence audit](research/adapt_v1/HISTORICAL_AUDIT.md)

@@ -2,6 +2,8 @@
 
 ## D-031 실험 모델
 
+봉인된 실행을 별도 디렉터리에서 재개했다. 기존 3/375회 기록은 시작 당시의 스냅샷이다. 카탈로그별 완료 건수와 원본 소스 복원 방법은 [재개 기록](../research/d031_completion/README.md)에 있다.
+
 [실험 설계](../04_design/Adaptation_Experiment.md)의 실행 진입점은 `python -m experiment`다. 게임 엔진·규칙 Compiler·온라인 학습자를 공유하며, 모델·훈련 목표·평가·통계는 `experiment/`에 있다. [사용법](../README.md)
 
 | 질문 | 측정 |

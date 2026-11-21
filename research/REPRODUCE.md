@@ -1,5 +1,10 @@
 # Reproduce the adaptation studies
 
+The follow-up studies relate rule similarity to measured adaptation and resume the full D-031 budget from its sealed archive. The original exploratory reward-stakes protocol has also been executed and verified. [Similarity results and reproduction](rule_similarity/REPORT.md) · [D-031 continuation](d031_completion/README.md) · [Reward-stakes experiment](probe_stakes/REPORT.md)
+
+The subsequent direct comparison between meta-training and ordinary pretraining against fixed and updating opponents has its own run commands, raw data guide and independent verification. The learned two-turn planning experiment is documented separately. [Direct opponent-adaptation experiment](opponent_adaptation/REPORT.md) · [Two-turn planning experiment](active_probe/REPORT.md)
+
+
 Run from the repository root on Linux. This checkout contains the supplied structured-game extension, including its compatibility change and tests. The new experiments require NumPy; the analysis figures require Matplotlib. The measured environment used Python 3.14.4, NumPy 2.5.4 and Matplotlib 3.11.2. The historical regression suite also uses PyTorch where available.
 
 ```bash

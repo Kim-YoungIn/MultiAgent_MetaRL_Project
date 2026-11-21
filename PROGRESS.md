@@ -1,17 +1,16 @@
 # Research status, 2026-11-21
 
 Current objective and stage
-- Completed the independent study of when a learned population prior helps multi-agent adaptation. Start at research/REPORT.md and research/REPRODUCE.md.
+- Measure how rule similarity relates to adaptation after exploration, and finish outstanding D-031 work at the original budget.
+- Similarity analysis and reward-stakes experiment complete. D-031 full-budget execution active in runs/d031_completion_v2/study/; the original run remains preserved.
 
 Verified outcomes
-- D-031 raw records reproduce M−P −0.002601 for one of 25 planned primary pairs. H1/H2 for D-031 remain unresolved. See research/adapt_v1/HISTORICAL_AUDIT.md.
-- Two-arena study: 384 fits, 2,048 held-out games, 32 independent blocks. Four-probe matched-prior advantage +0.06798; balanced vs narrow training +0.05352. Reversed concordance harmed transfer. All fits, outcomes and primary intervals independently reconstructed in runs/adapt_v1_final/.
-- Supplied structured extension: 512 fresh games, Q-learning opponents and continuous state. Mixed empirical-Bayes minus scratch gain to eight probes −0.01510 [−0.02818, −0.00290]. Raw replay in runs/structured_transfer_v1/.
-- Material v1 deviations: two motifs have one public state duplicated into two model features, and stochastic gates occur only in resource/mixed. The original run and launch protocol are preserved.
-- Two-turn exact diagnostic: three actions/depth three, 73/96 pairs gained from observing first reward, 40/96 from allowing a nongreedy opening. These measure different opportunities. Verified counts and 12 complete brute-force comparisons in runs/structured_oracle_v1/.
-- Fresh cross-size study: trained at three actions/depth three, transferred without refitting to six actions/depth five. At eight probes learned prior minus adaptive pooled +0.00376 [0.00071, 0.00702]; ordering reversed at sixteen. See runs/structured_scale_v1/.
-- Fresh runs reproduced all raw numerical blocks in the three learning studies. Repository suite 220 passed, 3 GPU-only skipped; seven new oracle/size tests passed. Compact outputs and preservation hashes in research/evidence/.
+- D-031 original first pair, 64 fresh games: within-family Spearman strategy similarity vs M−P adaptation AUC −.090, payoff similarity vs M−P −.067. Recomputed paired seeds, trial AUCs, strategy losses and ranks. This is one trained pair.
+- Structured games, 24 independent blocks and 3,072 games: reward/transition similarity vs 8-probe retained-experience gain Pearson −.042 [−.072,−.012]. Extra gain vs ordinary pretraining −.008 [−.042,+.025]. Exploratory, opened panel. See research/rule_similarity/REPORT.md and evidence/similarity.png.
+- Reward-stakes proposal: 16 blocks, 4,096 games and 32 shuffles. At terminal payoff weight eight, sensitivity contrast +.00188 [+.00080,+.00294]. Genuine full weighted return favored the myopic opener over the specialized opener. See research/probe_stakes/REPORT.md.
+- D-031 CUDA development completed 15/15 fits and all 51 evaluation receipts verified under the original seal. See runs/d031_completion_cuda_dev/verification.json. D-031 regression tests 20 passed.
+- D-031 full-budget continuation restored every sealed source and the original CPU runtime. 3→4/5 action transfer c1/j1 completed with M−P −.00875 and −.00688, verified from raw trials. At 19:09 KST 19/375 fit ledgers and 1/25 primary pairs were complete. CPU continuation first evaluates all 25 primary pairs, then runs the extensions.
+- Earlier matched counterpart-learning study and original H1/H2 evidence remain in research/opponent_adaptation/REPORT.md and research/REPORT.md.
 
-Active interpretation and next action
-- The studies identify budget- and population-dependent transfer under supplied representations and myopic adaptive policies. Discovery of strategic primitives, general H1/H2 and a causal threshold in complexity remain open.
-- All four evaluation panels are open. For a next research iteration, use a new protocol to compare a belief-conditioned planning policy with its myopic counterpart on structured tasks with measured two-turn opportunity.
+Next action
+- Check live counts with .venv/bin/python -m research.d031_completion.status runs/d031_completion_v2/study. Completion requires 375 ledgers and the planned evaluation shards, with no missing files. Use the sealed continuation command in research/d031_completion/README.md if the run is interrupted.

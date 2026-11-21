@@ -8,3 +8,5 @@ runs/
 checkpoints/
 *.ckpt
 /runs/
+.zip
+

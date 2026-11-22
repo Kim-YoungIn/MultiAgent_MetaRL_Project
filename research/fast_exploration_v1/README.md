@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Scaled Fast Exploration
 
 This is the scaled execution of the patched Fast Exploration architecture. The original protocol, prior fitting objective, Gaussian Student, warm Q-learning opponent and recurrent actor–critic are recorded in [PROTOCOL.md](PROTOCOL.md). The additional [scale protocol](SCALE_PROTOCOL.md) fixes the larger training and evaluation budgets. Existing D-031 and earlier Fast Exploration run directories contain separate experiments.
@@ -28,3 +29,8 @@ Omit the benchmark's `--cuda` flag to compare only the CPU implementations. `--o
 Each block has a JSON record, both Teacher checkpoints, and a compressed NPZ of all realized assessment turns and exploration totals per configuration, game, reset, method and K. The NPZ includes exact rule fingerprints, reset seeds and main training traces. `analysis/trials.csv.gz` contains per-trial returns and first-turn rewards. The block JSON provides the curve and seed mapping. `analysis/report.json` and its CSV counterparts provide ordinary and controlled comparisons, prior sensitivity, uncertainty and between-block variability. Three figures show the absolute adaptation curve, finite-difference slopes and individual assessment turns.
 
 The repository's earlier batch design in `mamrl/meta_batch.py` supplied the separation of simultaneous rollout collection and recurrent gradient replay. This run uses a shared batched collector for training and assessment, a new vectorized structured simulator, the existing Student representation, and the atomic artifact utility from `experiment/artifacts.py`. GPU training and CPU/GPU sampling paths remain executable. The main run uses the measured faster path, CPU with eight workers.
+=======
+# Fast Exploration v1 source
+
+See the [Fast Exploration study index](../fast_exploration/README.md) for the architecture guide, reproduction commands and results.
+>>>>>>> 0c5c8a8 (ver.0.8)

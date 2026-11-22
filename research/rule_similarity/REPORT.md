@@ -1,10 +1,10 @@
 # 훈련 게임과 규칙이 비슷하면 탐색 뒤에 더 잘 적응하는가?
 
-현재 자료에서 **훈련 규칙과 가까울수록 메타 탐색의 추가 이득이 커진다는 방향은 확인되지 않았다.** D-031의 정규 예산 결과 한 쌍에서 그 상관은 작고 음수였다. 독립적으로 훈련된 24개 블록의 구조화 게임에서는, 훈련과 덜 비슷한 게임에서 관측을 활용한 보상 개선 폭이 조금 더 컸다. 일반 사전학습도 같은 온라인 업데이트를 했을 때 생긴 이득을 빼면, 유사도와 메타학습의 추가 이득 사이의 구간은 0을 포함했다.
+현재 자료에서 **훈련 규칙과 가까울수록 메타 탐색의 추가 이득이 커진다는 방향은 확인되지 않았다.** D-031 주 실험 25쌍에서 전략 유사도와 M 자체의 적응 면적은 양의 상관을, 보상 목표 대조군을 뺀 M−P는 음의 상관을 보였다. 구조화 게임 24블록에서는 일반 사전학습과 같은 온라인 업데이트를 했을 때의 개선을 빼면, 유사도와 메타학습의 추가 이득 사이의 구간이 0을 포함했다.
 
 ![규칙 유사도와 탐색 후 적응 이득](evidence/similarity.png)
 
-왼쪽은 D-031 탐색 정책 비교다. 점마다 새 게임 한 개를 나타내며, X축은 게임 계열 내 전략 유사도 순위다. 오른쪽은 구조화 게임의 공통 탐색 이력 비교다. 학습 블록·게임 계열 안에서 보상과 전이의 합성 유사도를 사분위로 나누고, 해당 블록·계열의 평균 대비 보상 차이를 표시했다. 음영은 기술적 사분위별 95% 블록 구간이다.
+왼쪽은 D-031 첫 훈련 쌍의 탐색 정책 비교다. 점마다 새 게임 한 개를 나타내며, X축은 게임 계열 내 전략 유사도 순위다. 오른쪽은 구조화 게임의 공통 탐색 이력 비교다. 학습 블록·게임 계열 안에서 보상과 전이의 합성 유사도를 사분위로 나누고, 해당 블록·계열의 평균 대비 보상 차이를 표시했다. 음영은 기술적 사분위별 95% 블록 구간이다.
 
 ## 학습된 탐색 정책 비교
 
@@ -18,6 +18,17 @@ D-031은 훈련 게임에서 최적이던 3턴 대응 전략을 평가 게임에
 | 보상 함수 거리의 음수 | −.067 | −.104 | +.060 | +.121 |
 
 전략 유사도와 M−P의 상관은 계열별로 contest −.175, hidden −.308, reciprocity +.008, social +.113이었다. 전략 손실이 같은 게임에는 평균 순위를 줬다. 같은 64개 게임을 평가한 훈련 카탈로그·반복은 하나다. 이 수치는 그 카탈로그의 패널 내 기술 통계다. 평가 시행을 독립적으로 학습된 정책으로 세어 구간을 좁히지 않았다. M−P는 탐색자가 바꾼 경험과 상대의 후속 상태를 함께 반영한다. Q 보존 이득은 같은 탐색 직후 학생의 Q값을 보존하거나 지우고 평가한 보상 차이 G를 탐색 예산에 따라 적분한 값이다. [게임별 값과 상관](evidence/d031_games.csv) · [계열별 결과](evidence/d031_correlations.csv) · [원래 프로토콜](../../04_design/Adaptation_Experiment.md)
+
+### 주 실험 25쌍으로 확장
+
+완료된 다섯 카탈로그와 각 다섯 반복에서 M/P/무작위의 원자료를 같은 방법으로 다시 집계했다. 계열·반복 내부의 Spearman 상관을 구해 카탈로그 내에서 평균하고 다섯 카탈로그에 같은 가중치를 줬다.
+
+| 훈련 규칙과의 유사도 | M−P 적응 면적 | M−무작위 탐색 적응 면적 | M 자체의 적응 면적 | M의 학생 Q 보존 이득 면적 |
+|---|---:|---:|---:|---:|
+| 전략 전이 손실의 음수 | −.203 | −.064 | +.241 | +.146 |
+| 보상 함수 거리의 음수 | −.097 | −.070 | +.086 | +.046 |
+
+규칙이 가까울수록 M 자체의 적응 면적은 큰 편이었고, P에 대한 M의 상대 이득은 작았다. 25쌍이 같은 64개 평가 규칙을 공유하므로 1,600개 정책·규칙 조합을 독립 게임 표본으로 세지 않았다. 두 표는 이미 공개된 패널의 기술 통계다. 전체 규칙별 CSV와 플롯은 로컬 `runs/rule_similarity_d031_continuation/`에 있다. [25쌍 집계](evidence/d031_continuation_summary.json) · [주 실험 결과](../d031_completion/README.md)
 
 ## 구조화 게임에서 경험을 반영하는 능력
 
@@ -44,6 +55,7 @@ export PYTHONPATH=05_toy_models:.
 export OPENBLAS_NUM_THREADS=1
 export MPLCONFIGDIR=/tmp/mamrl_plot
 .venv/bin/python -m research.rule_similarity.d031 runs/d031_v2 runs/repro_similarity_d031 --verify-strategy-loss
+.venv/bin/python -m research.rule_similarity.d031 runs/d031_completion_v2/study runs/repro_similarity_d031_full
 .venv/bin/python -m research.rule_similarity.structured
 .venv/bin/python -m research.rule_similarity.dynamics
 .venv/bin/python -m research.rule_similarity.figure runs/repro_similarity_d031 runs/rule_similarity_dynamics runs/repro_similarity.png

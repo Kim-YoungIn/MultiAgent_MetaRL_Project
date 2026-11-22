@@ -1,0 +1,7 @@
+{
+  "blocks": 24,
+  "test_games": 3072,
+  "completing_invocation_seconds": 554.4213879550007,
+  "workers": 8,
+  "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.43"
+}

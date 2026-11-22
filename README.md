@@ -1,8 +1,8 @@
 # Multi-Agent Meta-Learning and Adaptation
 
-Research repository for investigating **how meta-learning affects agents' adaptation to unfamiliar games, opponents, and strategic interactions**. The aim is to identify mechanisms and conditions of adaptation through well-founded, reproducible experiments—not to optimize a predetermined model or preserve an existing implementation.
+Can agents use a few interactions to adapt to unfamiliar rules and learning opponents? This project measures what exploration teaches the agent, how quickly that changes its decisions, and what the experience costs in reward.
 
-> **Research scope is broader than the current code.** The repository contains Teacher–Student meta-exploration, recurrent PPO, tabular online learners, Memory-One games, and the D-031 study. These are historical experimental approaches, not mandatory components of future research.
+## Start here
 
 ## Completed adaptation experiments
 
@@ -44,76 +44,35 @@ Changing the scientific design is allowed; changing the recorded conditions of a
 
 | Path | Purpose |
 |---|---|
-| `PROGRESS.md` | Short, current session handoff: status, evidence, unresolved issues, next action |
-| `AGENTS.md` | Research-agent principles, autonomy, and progress-update rules |
-| `01_originals/` | Original proposal and course project guidance |
-| `02_references/` | Literature and reference index |
-| `03_ideas/` | Earlier ideas, critiques, and unadopted alternatives |
-| `00_management/` | Historical decisions, implementation status, questions, and research notes |
-| `04_design/` | Contracts for past and current experiment versions |
-| `05_toy_models/mamrl/` | Existing simulator, generators, learners, and diagnostics |
-| `experiment/` | D-031 training, evaluation, statistics, and reporting implementation |
-| `research/` | Completed cross-context, structured-game and cross-size studies, exact oracle, figures and verification |
-| `tests/` | Unit, interface, and experiment-contract tests |
-| `runs/` | Local experiment artifacts, normally excluded from Git |
+| Current status and next action | [PROGRESS.md](PROGRESS.md) |
+| Latest study | [Fast Exploration](research/fast_exploration/README.md) |
+| Architecture and reproduction | [Model, source map and commands](research/fast_exploration/architecture/README.md) · [v2 protocol](research/fast_exploration/architecture/V2_PROTOCOL.md) |
+| Experiment results and plots | [v2 36-block and fixed-budget results](research/fast_exploration/results/v2/README.md) · [v1 by master seed](research/fast_exploration/results/SEED_RESULTS.md) |
+| Simulator and game rules | [Structured games guide](STRUCTURED_GAMES.md) · [Simulator code](05_toy_models/mamrl/structured_games.py) |
 
-Read `PROGRESS.md` first when continuing work, then inspect the actual source, protocol, and artifacts that support the current task. A historical document's “FIXED” designation applies to its original experiment unless explicitly reaffirmed for a new design.
+## Work on the current study
 
-## Existing implementation: D-031 (historical study)
-
-D-031 tests whether exploration trained to improve a downstream learner's experience-conditioned performance differs from reward-oriented pretraining. It uses simultaneous two-player Memory-One games with logical payoff rules, online learning opponents, and the following methods:
-
-| Method | Implemented training objective |
-|---|---|
-| **M** | Difference between downstream returns with retained and erased student Q state (`G`) |
-| **P** | Explorer's own mean reward during the exploration phase |
-| **O** | M's objective with part of the explorer's observations masked |
-
-A recurrent context-based actor gathers experience for a freshly initialized online Q-learning student; opponents use online Q-learning or Expected SARSA. Evaluation measures downstream performance across exploration budgets and compares adaptation-area estimates. **`G` is not the same as absolute downstream return or pure information gain.** The student and opponent can both continue learning during evaluation.
-
-The authoritative protocol for that experiment is [`04_design/Adaptation_Experiment.md`](04_design/Adaptation_Experiment.md). The corresponding historical status is described in [`00_management/Implementation_Status.md`](00_management/Implementation_Status.md). The earliest completed full-budget cell did not establish superiority of M over P; remaining cells must not be presented as completed without evidence.
-
-### Running the existing D-031 implementation
-
-Run from the repository root on WSL/Linux with a compatible Python environment and PyTorch/NumPy installed:
+Run from the repository root with the Python environment in the [study guide](research/fast_exploration/architecture/README.md). Use a new output directory for a new run.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-training.txt
-
-# Inspect the existing protocol, its methods, and compute budget.
-.venv/bin/python -m experiment plan
-
-# Small development-only integration run.
-.venv/bin/python -m experiment run --dev --block all --output runs/my_d031_dev
-
-# Reproduce the original primary protocol in a new output directory.
-.venv/bin/python -m experiment prepare --output runs/my_d031
-.venv/bin/python -m experiment run --block primary --output runs/my_d031
-
-# Summarize completed outputs and run the repository tests.
-.venv/bin/python -m experiment report --output runs/my_d031
-PYTHONPATH=05_toy_models .venv/bin/python -m unittest discover -s tests -v
+export PYTHONPATH=05_toy_models:.
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+.venv/bin/python -m unittest discover -s tests -p 'test_fast_exploration*.py'
+.venv/bin/python -m research.fast_exploration_v1.scale --split dev --output runs/repro_fast_dev --workers 2 --device cpu
 ```
 
-The implemented CLI supports `--block` (`primary`, `rules`, `opponents`, `families`, `actions`, `all`), `--catalog`, `--replica`, `--device cpu|cuda`, and `--defer-report`. Existing matched checkpoints can resume under the same recorded code and runtime configuration. Results are stored under `runs/<study>/` in `summary.md`, `report.json`, `panels/`, `cells/`, and per-trial artifacts.
+The current Teacher learns to collect experiences for a Bayesian linear Student. The evaluation pairs methods on the same unseen games and opponent streams. Run outputs live under `runs/`; small evidence tables and figures live with the respective study. Original commands and source paths are part of each study's reproduction contract.
 
-The existing experimental design fixes 800 updates × 32 trials, K=H=24, five catalogs and five training replicas, and specific evaluation repetitions in `experiment/protocol.py`. **These are implementation defaults and limits, not scientifically justified maxima.** The CLI's `--catalog` and `--replica` select from fixed ranges; they do not increase those ranges. `--dev` runs a distinct short development protocol rather than an arbitrary-size configuration.
+## Earlier studies
 
-Earlier implementations remain accessible through `PYTHONPATH=05_toy_models python -m mamrl ...` and `python -m mamrl.meta_exploration ...`. For older commands and their exact defaults, see the [v0.5 README snapshot](https://github.com/Kim-YoungIn/MultiAgent_MetaRL_Project/blob/86386cebb75f95b5867f694d927491bc78c71f8c/README.md) and the associated experiment contracts.
+| Study | Evidence and reproduction |
+|---|---|
+| D-031, recurrent exploration in Memory-One games | [Continuation and completion status](research/d031_completion/README.md) · [Original protocol](04_design/Adaptation_Experiment.md) |
+| Rule similarity and transfer | [Correlation results](research/rule_similarity/REPORT.md) |
+| Adaptation against fixed and updating opponents | [Direct meta-training comparison](research/opponent_adaptation/REPORT.md) |
+| Exploration objectives and the value of reward feedback | [Absolute-return opening](research/absolute_exploration/REPORT.md) · [Reward stakes](research/probe_stakes/REPORT.md) · [Two-turn planning](research/active_probe/REPORT.md) |
+| Structured-game, cross-size and cross-context transfer | [Integrated report](research/REPORT.md) · [Reproduction](research/REPRODUCE.md) |
 
-## Scaling and redesigning experiments
+The original proposal and course requirements are in [01_originals](01_originals/). Historical decisions, literature, abandoned ideas and experiment contracts remain in [00_management](00_management/), [02_references](02_references/), [03_ideas](03_ideas/) and [04_design](04_design/). The D-031 entry point remains `python -m experiment`. Use [AGENTS.md](AGENTS.md) for research and session guidance.
 
-**Training scale, number and diversity of tasks, action spaces, model capacity, evaluation horizons, replication, and computational infrastructure are part of experiment design.** If stronger evidence requires larger or qualitatively different experiments, extend or replace the implementation rather than treating the old protocol as a cap.
-
-A new runner or research pipeline may need to support experiment-specific configurations; distinct architectures and adaptation mechanisms; scalable sampling and training; CPU/GPU and parallel execution as useful; resumable, versioned checkpoints; deterministic task manifests; and robust statistical aggregation. Select only the machinery justified by the research question—building a universal framework is not the objective.
-
-Document actual availability separately from planned extensions. Record training interactions, optimization steps, evaluation cost, hardware/time requirements, seeds, source versions, task manifests, and the evidence underlying results. When comparing methods, make computational and informational budgets explicit. Keep previously evaluated test panels and protocols distinguishable from genuinely new final evaluations.
-
-## Results, reproducibility, and continuation
-
-The desired output is a defensible account of **whether, when, and why meta-learning improves adaptation**, including cases where it does not. Report initial performance, adaptation across experience levels, costs, variation across training seeds and task families, and limitations of interpretation. Testing and successfully running software are not themselves evidence for a scientific hypothesis.
-
-Use `PROGRESS.md` as the single concise handoff for the *current* research session. Update it after substantial milestones and before stopping: current objective/stage, verified outcomes and artifact paths, active decisions, unresolved issues, and the next action. Keep it short and replace stale entries instead of accumulating a transcript. Historical details belong with versioned experiment artifacts and the existing research records.
-
-For contributors and research agents, [`AGENTS.md`](AGENTS.md) describes the working principles. Neither that document nor this README should constrain independent theoretical exploration to the historical D-031 design.
+The v0.5 results bundle is retained locally as `runs/archive/runs-v0.5.zip`. To retrieve the exact bundle from a clone with the original commit, run `git show ea2a646:runs.zip > runs-v0.5.zip` from the root. The original file manifest is a historical snapshot.

@@ -7,7 +7,11 @@ from pathlib import Path
 
 import numpy as np
 
+<<<<<<< HEAD
 from .verify import REGIMES
+=======
+from .report import REGIMES
+>>>>>>> 0c5c8a8 (ver.0.8)
 
 
 def export(root):

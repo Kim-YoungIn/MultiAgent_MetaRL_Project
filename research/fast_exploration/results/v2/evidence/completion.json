@@ -1,0 +1,8 @@
+{
+  "blocks": 36,
+  "test_games": 4608,
+  "workers": 12,
+  "completing_invocation_seconds": 555.3154195749999,
+  "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "manifest_sha256": "7ef77a4c410d142dadadf6aa9329f4b066b268e212d7d116525f01116d6f9ef2"
+}

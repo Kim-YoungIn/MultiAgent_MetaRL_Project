@@ -1,0 +1,56 @@
+{
+  "study": "runs/d031_completion_v2/study",
+  "cells": 25,
+  "rule_rows": 1600,
+  "scope": "Opened-panel descriptive estimates; fixed shared rules and paired profiles/repeats.",
+  "estimates": [
+    {
+      "metric": "strategy_similarity",
+      "outcome": "meta_minus_reward",
+      "catalogs": 5,
+      "mean_spearman": -0.20349308462668886
+    },
+    {
+      "metric": "strategy_similarity",
+      "outcome": "meta_minus_random",
+      "catalogs": 5,
+      "mean_spearman": -0.06439347110134357
+    },
+    {
+      "metric": "strategy_similarity",
+      "outcome": "meta_gain",
+      "catalogs": 5,
+      "mean_spearman": 0.24097687007152696
+    },
+    {
+      "metric": "strategy_similarity",
+      "outcome": "retained_q_gain",
+      "catalogs": 5,
+      "mean_spearman": 0.14573174352591717
+    },
+    {
+      "metric": "payoff_similarity",
+      "outcome": "meta_minus_reward",
+      "catalogs": 5,
+      "mean_spearman": -0.09735294117647059
+    },
+    {
+      "metric": "payoff_similarity",
+      "outcome": "meta_minus_random",
+      "catalogs": 5,
+      "mean_spearman": -0.07008678473209914
+    },
+    {
+      "metric": "payoff_similarity",
+      "outcome": "meta_gain",
+      "catalogs": 5,
+      "mean_spearman": 0.08632352941176472
+    },
+    {
+      "metric": "payoff_similarity",
+      "outcome": "retained_q_gain",
+      "catalogs": 5,
+      "mean_spearman": 0.04585294117647059
+    }
+  ]
+}

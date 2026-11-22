@@ -1,0 +1,45 @@
+{
+  "config": {
+    "teacher_updates": 16,
+    "batch": 32,
+    "ks": [
+      0,
+      4,
+      8,
+      16,
+      24
+    ],
+    "h": 32
+  },
+  "reset_samples": 32,
+  "training": [
+    {
+      "training": "scalar CPU",
+      "sampling": "scalar CPU",
+      "seconds": 27.44535010999971
+    },
+    {
+      "training": "cpu",
+      "sampling": "cpu",
+      "seconds": 3.265216131003399,
+      "maximum_weight_absolute_difference": 0.0
+    },
+    {
+      "training": "cuda",
+      "sampling": "cpu",
+      "seconds": 5.3357820179953706,
+      "maximum_weight_absolute_difference": 0.0006282180547714233
+    },
+    {
+      "training": "cuda",
+      "sampling": "cuda",
+      "seconds": 5.743200543001876,
+      "maximum_weight_absolute_difference": 0.0006282180547714233
+    }
+  ],
+  "scalar_evaluation_seconds": 13.443056433003221,
+  "batch_evaluation_seconds": 1.0147800010017818,
+  "corresponding_scalar_and_batch_eval_agree": true,
+  "torch": "2.14.1+cu130",
+  "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU"
+}

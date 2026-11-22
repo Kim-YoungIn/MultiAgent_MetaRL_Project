@@ -1,0 +1,9 @@
+{
+  "blocks": 36,
+  "scalar_trajectories": 2592,
+  "actual_fixed_budget": 48,
+  "checked_against": [
+    "runs/fast_exploration_scale_final",
+    "runs/fast_exploration_v2_dev_matched"
+  ]
+}

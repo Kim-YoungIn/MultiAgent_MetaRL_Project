@@ -12,8 +12,8 @@ The extension is present in this checkout. Subsequent experiments used this simu
 From the repository root, apply the supplied patch:
 
 ```bash
-git apply --check structured_games.patch
-git apply structured_games.patch
+git apply --check 03_ideas/archive/structured_games.patch
+git apply 03_ideas/archive/structured_games.patch
 ```
 
 The patch adds `05_toy_models/mamrl/structured_games.py` and

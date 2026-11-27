@@ -651,6 +651,7 @@ def run_study_exp2a(cfg: dict, workers: int = 1) -> dict:
                         "total_seed_sd": round(agg_methods[m]["total_seed_sd"], 4),
                         "total_median": round(agg_methods[m]["total_median"], 4),
                         "total_iqr": round(agg_methods[m]["total_iqr"], 4),
+                        "early_auc_1_4": round(agg_methods[m]["early_auc_1_4"], 4),
                         "post_mean": round(agg_methods[m]["post_mean"], 4),
                         "opp_total_mean": round(agg_methods[m]["opp_total_mean"], 4),
                         "opp_q_l1": round(agg_methods[m]["opp_q_l1_change"], 4),
@@ -751,6 +752,7 @@ def run_study_exp2a(cfg: dict, workers: int = 1) -> dict:
                     "win_rate": round(float(boot_delta["win_rate"]), 4),
                     "tie_rate": round(float(boot_delta["tie_rate"]), 4),
                     "loss_rate": round(float(boot_delta["loss_rate"]), 4),
+                    "threshold": delta_post,
                     "verdict": boot_delta["verdict"],
                 }
             )
@@ -779,6 +781,7 @@ def run_study_exp2a(cfg: dict, workers: int = 1) -> dict:
                     "win_rate": round(float(did["win_rate"]), 4),
                     "tie_rate": round(float(did["tie_rate"]), 4),
                     "loss_rate": round(float(did["loss_rate"]), 4),
+                    "threshold": delta_post,
                     "verdict": did["verdict"],
                 }
             )

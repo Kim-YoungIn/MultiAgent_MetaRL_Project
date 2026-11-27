@@ -58,9 +58,11 @@ class TestSymmetricGamesExp2B(unittest.TestCase):
         obs1, _obs2 = env.reset()
         obs1, _obs2, _r1, _r2 = env.step(np.array([0, 1, 2, 3]), np.array([3, 2, 1, 0]))
         x_masked = encode_sym_obs_batch(obs1, horizon=12, step_t=1, variant="rl2_masked", mask_k=4)
-        # Opp action one-hot (4..7) and reward (8) must be strictly zero for t < 4
-        np.testing.assert_allclose(x_masked[:, SYM_N_ACTIONS : 2 * SYM_N_ACTIONS + 1], 0.0)
-        x_open = encode_sym_obs_batch(obs1, horizon=12, step_t=4, variant="rl2_masked", mask_k=4)
+        # Opp action one-hot (4..7) and reward (8) must be strictly zero for step_t <= mask_k (turns 1..4 feedback hidden)
+        for t_masked in (0, 1, 2, 3, 4):
+            x_masked = encode_sym_obs_batch(obs1, horizon=12, step_t=t_masked, variant="rl2_masked", mask_k=4)
+            np.testing.assert_allclose(x_masked[:, SYM_N_ACTIONS : 2 * SYM_N_ACTIONS + 1], 0.0)
+        x_open = encode_sym_obs_batch(obs1, horizon=12, step_t=5, variant="rl2_masked", mask_k=4)
         self.assertGreater(float(np.sum(np.abs(x_open[:, SYM_N_ACTIONS : 2 * SYM_N_ACTIONS]))), 0.0)
 
     def test_exp2b_runner_end_to_end_smoke(self) -> None:

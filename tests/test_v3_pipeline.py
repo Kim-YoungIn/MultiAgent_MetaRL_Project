@@ -36,10 +36,11 @@ class TestMaskingAndCeilings(unittest.TestCase):
         x_full = encode_obs_batch(obs, horizon=24, step_t=2, variant="rl2", mask_k=4)
         self.assertGreater(float(np.abs(x_full[:, fb_slice]).sum()), 0.0)
 
-        # rl2_masked hides feedback for t < 4, shows live feedback at t >= 4
-        x_m_before = encode_obs_batch(obs, horizon=24, step_t=2, variant="rl2_masked", mask_k=4)
-        self.assertEqual(float(np.abs(x_m_before[:, fb_slice]).sum()), 0.0)
-        x_m_after = encode_obs_batch(obs, horizon=24, step_t=4, variant="rl2_masked", mask_k=4)
+        # rl2_masked hides ALL feedback from turns 1..4 (so step_t=0..4 are strictly masked; step_t=5 reveals turn-5 feedback)
+        for t_masked in (0, 1, 2, 3, 4):
+            x_m_before = encode_obs_batch(obs, horizon=24, step_t=t_masked, variant="rl2_masked", mask_k=4)
+            self.assertEqual(float(np.abs(x_m_before[:, fb_slice]).sum()), 0.0, f"Leak at step_t={t_masked}")
+        x_m_after = encode_obs_batch(obs, horizon=24, step_t=5, variant="rl2_masked", mask_k=4)
         self.assertGreater(float(np.abs(x_m_after[:, fb_slice]).sum()), 0.0)
 
         # prior_only hides feedback at ALL turns

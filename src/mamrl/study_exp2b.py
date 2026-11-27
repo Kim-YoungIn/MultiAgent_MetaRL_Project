@@ -63,7 +63,8 @@ def encode_sym_obs_batch(
     valid_a = (pa >= 0) & (pa < SYM_N_ACTIONS)
     x[idx[valid_a], pa[valid_a]] = 1.0
 
-    allow_feedback = (variant == "rl2") or (variant == "rl2_masked" and step_t >= mask_k)
+    # Hide ALL feedback generated during turns 1..mask_k (t = 0..mask_k-1); reveal only for step_t > mask_k.
+    allow_feedback = (variant == "rl2") or (variant == "rl2_masked" and step_t > mask_k)
     if allow_feedback:
         po = obs["prev_opp_action"]
         valid_o = (po >= 0) & (po < SYM_N_ACTIONS)
@@ -861,6 +862,8 @@ def run_study_exp2b(cfg: dict, workers: int = 1) -> dict:
                         "p1_mean": round(agg["p1_mean"], 4),
                         "p1_seed_sd": round(agg["p1_seed_sd"], 4),
                         "p1_median": round(agg["p1_median"], 4),
+                        "p1_iqr": round(agg["p1_iqr"], 4),
+                        "p1_early_auc_1_4": round(agg["p1_early_auc_1_4"], 4),
                         "p2_mean": round(agg["p2_mean"], 4),
                         "welfare_mean": round(agg["welfare_mean"], 4),
                         "welfare_median": round(agg["welfare_median"], 4),

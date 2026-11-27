@@ -1,0 +1,200 @@
+{
+  "study_id": "core_v3_sealed",
+  "git_commit": "e65ccaa",
+  "timestamp_utc": "2026-11-27T12:38:19.920608+00:00",
+  "python": "3.14.4",
+  "torch": "2.14.1+cu130",
+  "numpy": "2.5.4",
+  "config": {
+    "study_id": "core_v3_sealed",
+    "output_dir": "runs/core_v3_sealed",
+    "regimes": [
+      "R0",
+      "R1",
+      "R3"
+    ],
+    "methods": [
+      "drqn_aux_yr",
+      "drqn_aux_y",
+      "drqn_aux_r",
+      "drqn_vanilla",
+      "drqn_aux_yr_masked",
+      "drqn_prior_only",
+      "rl2_ppo",
+      "structural_model",
+      "contextual_ucb",
+      "arm_ucb",
+      "greedy",
+      "random",
+      "bayes_optimal",
+      "clairvoyant"
+    ],
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005
+    ],
+    "horizon": 24,
+    "primary_k": 4,
+    "audit_ks": [
+      2,
+      4,
+      8
+    ],
+    "n_eval_episodes": 512,
+    "eval_seed_base": 90000,
+    "hidden_dim": 64,
+    "batch_episodes": 128,
+    "total_transitions": 262144,
+    "ppo_epochs": 4,
+    "minibatches": 4,
+    "gamma": 1.0,
+    "gae_lambda": 0.95,
+    "clip_eps": 0.2,
+    "lr": 0.002,
+    "entropy_coef": 0.1,
+    "entropy_coef_end": 0.005,
+    "value_coef": 0.5,
+    "max_grad_norm": 1.0,
+    "log_interval": 4,
+    "drqn_batch_episodes": 64,
+    "drqn_iters": 450,
+    "drqn_warmup_iters": 100,
+    "drqn_replay_capacity": 8192,
+    "drqn_grad_steps": 8,
+    "drqn_minibatch": 128,
+    "drqn_lr": 0.003,
+    "drqn_polyak_tau": 0.05,
+    "drqn_aux_y_weight": 2.0,
+    "drqn_aux_r_weight": 1.0,
+    "drqn_log_interval": 15,
+    "structural_offline_episodes": 1024,
+    "contextual_ucb_beta": 1.0,
+    "arm_ucb_beta": 1.0,
+    "eval_deterministic": false,
+    "n_bootstrap": 10000,
+    "delta_info": 0.25,
+    "delta_total": 0.3,
+    "workers": 6,
+    "device": "cpu"
+  },
+  "gate0": {
+    "R0": {
+      "regime": "R0",
+      "horizon": 24,
+      "bayes_optimal_value": 20.2,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 15.4,
+      "myopic_openings": [
+        "S"
+      ],
+      "optimal_openings": [
+        "S"
+      ],
+      "opening_q_values": {
+        "S": 20.2,
+        "P": 19.9,
+        "P0": 19.9,
+        "P1": 19.9,
+        "X00": 18.75,
+        "X01": 18.75,
+        "X10": 18.75,
+        "X11": 18.75
+      },
+      "opening_margin": 0.0,
+      "must_change_opening": false,
+      "open_loop_bounds": {
+        "1": 20.2,
+        "2": 19.4,
+        "4": 17.8,
+        "8": 14.6
+      },
+      "feedback_conditioning_headroom": {
+        "1": 0.0,
+        "2": 0.8,
+        "4": 2.4,
+        "8": 5.6
+      }
+    },
+    "R1": {
+      "regime": "R1",
+      "horizon": 24,
+      "bayes_optimal_value": 19.1,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 14.3,
+      "myopic_openings": [
+        "S"
+      ],
+      "optimal_openings": [
+        "P"
+      ],
+      "opening_q_values": {
+        "S": 18.3,
+        "P": 19.1,
+        "P0": 18.0,
+        "P1": 18.0,
+        "X00": 16.3,
+        "X01": 16.3,
+        "X10": 16.3,
+        "X11": 16.3
+      },
+      "opening_margin": 0.8,
+      "must_change_opening": true,
+      "open_loop_bounds": {
+        "1": 19.1,
+        "2": 19.1,
+        "4": 17.5,
+        "8": 14.3
+      },
+      "feedback_conditioning_headroom": {
+        "1": 0.0,
+        "2": 0.0,
+        "4": 1.6,
+        "8": 4.8
+      }
+    },
+    "R3": {
+      "regime": "R3",
+      "horizon": 24,
+      "bayes_optimal_value": 17.575,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 12.775,
+      "myopic_openings": [
+        "S"
+      ],
+      "optimal_openings": [
+        "P0",
+        "P1"
+      ],
+      "opening_q_values": {
+        "S": 16.775,
+        "P": 17.45,
+        "P0": 17.575,
+        "P1": 17.575,
+        "X00": 15.675,
+        "X01": 15.675,
+        "X10": 15.675,
+        "X11": 15.675
+      },
+      "opening_margin": 0.8,
+      "must_change_opening": true,
+      "open_loop_bounds": {
+        "1": 17.575,
+        "2": 17.575,
+        "4": 16.9,
+        "8": 13.7
+      },
+      "feedback_conditioning_headroom": {
+        "1": 0.0,
+        "2": 0.0,
+        "4": 0.675,
+        "8": 3.875
+      }
+    }
+  }
+}

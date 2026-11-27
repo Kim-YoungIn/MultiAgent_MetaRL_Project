@@ -49,7 +49,10 @@ def encode_obs_batch(
     valid_a = (prev_a >= 0) & (prev_a < N_ACTIONS)
     x[idx[valid_a], prev_a[valid_a]] = 1.0
 
-    allow_feedback = (variant == "rl2") or (variant == "rl2_masked" and step_t >= mask_k)
+    # At step_t, obs['prev_opp_action'] and obs['prev_self_reward'] come from turn step_t (0-indexed: t = step_t - 1).
+    # To hide ALL feedback generated during turns 1..mask_k (t = 0..mask_k-1) with zero retrospective revelation,
+    # feedback is only enabled for step_t > mask_k (starting at step_t = mask_k + 1, which observes turn mask_k + 1).
+    allow_feedback = (variant == "rl2") or (variant == "rl2_masked" and step_t > mask_k)
     if allow_feedback:
         prev_y = obs["prev_opp_action"]
         valid_y = (prev_y >= 0) & (prev_y < N_OPP_SYMBOLS)

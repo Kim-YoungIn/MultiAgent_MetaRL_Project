@@ -1,7 +1,7 @@
 {
   "study_id": "exp2a_online_opp",
-  "git_commit": "aeec6c6",
-  "timestamp_utc": "2026-11-27T11:19:00.679386+00:00",
+  "git_commit": "e65ccaa",
+  "timestamp_utc": "2026-11-27T12:43:01.552578+00:00",
   "python": "3.14.4",
   "torch": "2.14.1+cu130",
   "numpy": "2.5.4",

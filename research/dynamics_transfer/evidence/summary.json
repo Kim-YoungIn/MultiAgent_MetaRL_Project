@@ -1,0 +1,20 @@
+{
+  "blocks": 36,
+  "master_seeds": [
+    17493629,
+    27510379,
+    39572317
+  ],
+  "bootstrap_draws": 20000,
+  "primary": {
+    "metric": "controlled_mean:full_minus_masked",
+    "family": "all",
+    "comparison": "lag0_distance0.6_minus_0",
+    "blocks": 36,
+    "mean": -0.00011828875220687111,
+    "block_sd": 0.005113681887290956,
+    "ci_low": -0.0016820624069082924,
+    "ci_high": 0.0014242473909404686
+  },
+  "interpretation": "Block-stratified percentile intervals are pointwise, not simultaneous."
+}

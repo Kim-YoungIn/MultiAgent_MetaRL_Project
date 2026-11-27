@@ -1,0 +1,18 @@
+{
+  "manifest_sha256": "6ce24bb4cb2f320ebd53aff3a3863de80f4f20d17957f9c49d879471c3187930",
+  "summary_sha256": "2428e845fec68d9e82d07c39014063ed77fc489adb232028c24f755c63fbd057",
+  "blocks": 36,
+  "base_games": 2304,
+  "variant_fingerprints": 13824,
+  "sampled_scalar_trajectories": 864,
+  "scalar_sampling": "one episode per family and block; intervention and reset rotate by block/family; 3 controlled and 3 continuous methods",
+  "scalar_scope": "full warm-up, Teacher and masked inputs, Student and Q-learning actions, resets and both players rewards",
+  "all_source_receipts_and_raw_hashes_checked": true,
+  "previous_panel_fingerprint_overlap": 0,
+  "primary_mean": -0.00011828875220687046,
+  "primary_block_sd": 0.0051136818872909535,
+  "primary_ci95": [
+    -0.0016820624069082903,
+    0.0014242473909404666
+  ]
+}

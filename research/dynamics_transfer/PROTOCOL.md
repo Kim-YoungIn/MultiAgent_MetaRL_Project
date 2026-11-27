@@ -1,0 +1,33 @@
+# Dynamics transfer v1
+
+Frozen on 2026-11-27 before collecting the new evaluation panel. The source v2 training and its published tests have already been examined. This is a transfer test of those archived Teachers.
+
+## Question
+
+When learning opponents must coordinate to change a game state, does a feedback-conditioned exploration policy retain its advantage as that transition becomes less reliable? Does requiring a previous coordinated action change the result? All comparisons use the same Student architecture and pooled prior within a block. General benefits of retraining across more diverse tasks, optimal information acquisition, and a universal game distance are outside this contrast.
+
+## Paired game construction
+
+Use the v2 three-action, depth-three, two-player stochastic games with 3-level states. Draw 64 fresh balanced base rules per final block, two resets per rule, for all 36 existing training blocks (12 per master seed). In each rule modify only its **first positive joint-invest transition**. In resource and mixed this replenishes resource with native probability .8. In sequence this advances progress with native probability 1 and requires both players to repeat the investment from two turns ago. In reciprocity it raises the state used for trust rewards with native probability 1. In mixed, all other mechanisms continue to operate.
+
+- Subtract absolute distance `d ∈ {0, .3, .6}` from the native success probability. The generator accepts intermediate distances. Reduce it in one direction only. This makes coordination less productive as distance increases.
+- Cross each distance with native prerequisites or one additional lag-1 prerequisite. In the latter case both players must also have invested on the previous turn. Random initial histories follow the original simulator. Identical base payoffs, action-role mappings, state visibility, reward scale and remaining rules are used in all six variants.
+- At fixed prerequisites, the supremum over matched states, histories and joint actions of total-variation distance between one-step joint next-state distributions is exactly `|d1−d2|`. On a successful unsaturated eligible investment two distinct outcomes differ by that Bernoulli probability. Ineligible and saturated states have distance zero. A simultaneous relabeling of both games' actions preserves the result. In the native-prerequisite stratum this gives an exact distance to the family's training transition mechanism after role alignment. The extra prerequisite is a separate structural change, and the three d values in that stratum are relative to its own d=0 version. An observed single trajectory need not encounter the distinguishing action.
+- Independently of learned policies, run uniform joint actions and a coordinated cyclic script (four joint investments followed by two joint harvests) for 96 turns on the same games under coupled randomness across variants. Record selected-state occupancy, effective opportunities (eligible and below the ceiling), state disagreement with the native game and reward differences. These are policy-specific exposure diagnostics. They do not measure the Bayes value of information.
+
+## Evaluation
+
+The opponent learns with the original v2 Q update and 32 warm-up turns per variant, unavailable to the evaluated agent. Hold the warm-up moves, reset, gate and policy sampling streams common across paired variants. Recompute warm-up Q in each actual game. The effect of changing dynamics includes its effect on the warmed opponent. Family roles, d and the prerequisite flag are analysis-only metadata.
+
+- **Primary endpoint.** Collect K=8 exploration turns with either the v2 pooled full-feedback Teacher or its matched feedback-masked Teacher. Retain the Student posterior, reset game and history, restore warmed opponent Q, and freeze both learners for 32 turns. Compute the difference in mean absolute reward per assessment turn, full minus masked. Primary estimand is this feedback benefit at d=.6 minus the same benefit at d=0 under native prerequisites. Positive values mean the feedback benefit grows as the selected coordination transition becomes less reliable. A separate K=0 frozen Student supplies the zero-shot reference. This is a fixed-budget endpoint, distinct from integrating over K.
+- **Secondary endpoints.** Repeat with the added prerequisite and compare the paired shifts. Report absolute returns, family profiles and individual master-seed results. In a separate continuous 96-turn deployment, compare the archived total-return Teacher at K=8 to matched UCB (v2 development β=.15) and greedy Student-only. Both learners and the game continue across the handoff. Report cumulative reward at turns 48 and 96, and identify opening costs. Save actual joint actions and rewards per turn, including probes.
+- Weight the four families equally, average paired resets and games within trained block, and use a paired, master-seed-stratified bootstrap of 36 blocks (20,000 draws) for two-sided 95% intervals. Report the planned primary even if inconclusive. Secondary and family intervals are pointwise and descriptive. The three prespecified distances show the response shape along this axis. An endpoint trend cannot identify the causal effect of similarity separately from transition direction, opportunity frequency or the payoff for coordination.
+- Fresh seeds and base/variant fingerprints are checked against v2 training, prior, main test and 96-turn test rules. No refit or hyperparameter selection on this panel. Development smoke output is excluded. Preserve per-block receipts, source and policy hashes. Retain full tapes locally in `runs/`, compact evidence in this directory.
+
+## Reproduction
+
+Run from the repository root. The original 36 v2 block checkpoints, priors, rule fingerprints and horizon receipts must be available. The [v2 reproduction guide](../fast_exploration/architecture/README.md#run-v2) describes their generation. See the [results and commands](REPORT.md) for the run, analysis, and independent checks.
+
+## Interpretation
+
+Reward and transition kernels can define distances by how actions distinguish states. Here the restricted family permits an exact one-step calculation without enumerating long histories. Extending it to a planning distance under an arbitrary learning opponent would require specifying opponent state, policy and horizon. For a general MDP treatment see [Ferns, Panangaden and Precup](https://arxiv.org/abs/1207.4114). A Bayes-adaptive value-of-information comparison would also specify uncertainty over tasks and evaluate decisions under the updated belief. [Zintgraf et al.](https://jmlr.csail.mit.edu/papers/v22/21-0657.html)

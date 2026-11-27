@@ -33,8 +33,9 @@ Only three living documents govern active work:
 - **Mandatory Controls & Decomposition:** Compare End-to-End `RL²` (Recurrent PPO+GAE) against **Greedy, Random, Arm-Independent UCB, Memory-Reset (zero-shot prior), Masked-Feedback `RL²`**, and **Oracle** (diagnostic ceiling). Decompose Exploration vs. Exploitation without OOD bias using (1) **Neutral Bayes Info/Value Audit** of collected trajectories, (2) **Prefix-Swap into a Mixed-Prefix Neutral Exploiter**, and (3) **Opponent-Restored vs. Continuous Deployment** evaluation.
 - **No Leakage or Silent Overwrites:** Separate development and final test seeds; record config + git commit + seed in every run output; preserve negative/null findings honestly.
 
-## 4. Multi-Agent Collaboration (GPT / Codex / Antigravity)
+## 4. Multi-Agent Collaboration (Lead: Antigravity | Collaborators: Codex / GPT)
 
-- Before consulting an external agent (e.g., ChatGPT web), run `.venv/bin/python scripts/pack_context.py` to generate `handoff/context_pack.md`.
-- Store external critiques/proposals in `handoff/reviews/YYYYMMDD_<topic>.md`. External suggestions are **proposals until adopted into `docs/SPEC.md`**.
-- One writer at a time per file; validate every consequential code change with `pytest`/`unittest` before updating `PROGRESS.md`.
+- **Authority & Ownership:** **Antigravity is the Lead Agent** and sole writer of `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`, sealed `results/`, and final git commits/merges. **Codex agents** (main session or `.codex/agents/` subagents: `research_critic`, `validator`, `experiment_worker`, `paper_reviewer`) operate strictly on Lead-assigned briefs in `handoff/tasks/TASK-XXX_*.md`.
+- **Hard Scope Guardrail:** Every Codex agent MUST read `AGENTS.md`, `handoff/BOARD.md`, and its assigned `handoff/tasks/TASK-XXX_*.md` first, modify ONLY paths listed under `Allowed Write Paths`, validate changes with `unittest`, and deliver outputs to `handoff/reports/` or `handoff/reviews/`.
+- **Parallel Safety:** When a Codex coding worker runs concurrently with the Lead Agent, use either an isolated git worktree (`git worktree add ../mamrl-codex-<task> -b codex/<task>`) or strictly disjoint `Allowed Write Paths` verified via `.venv/bin/python scripts/codex_handoff.py check-scope --id <TASK-ID>`.
+- **Sync & Adoption:** Refresh `handoff/context_pack.md` via `.venv/bin/python scripts/pack_context.py` before dispatching external reviews. All Codex/GPT reports in `handoff/reviews/` and `handoff/reports/` remain **proposals until reviewed and adopted by the Lead Agent** into `docs/SPEC.md`, `src/mamrl/`, and `PROGRESS.md`. See `docs/COLLABORATION.md`.

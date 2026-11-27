@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a compact single-file context bundle for GPT / external review agents.
+"""Generate a compact single-file context bundle for Codex / GPT review & collaboration.
 
 Usage:
     .venv/bin/python scripts/pack_context.py
@@ -18,8 +18,16 @@ ROOT = Path(__file__).resolve().parent.parent
 KEY_DOCS = [
     "AGENTS.md",
     "PROGRESS.md",
+    "handoff/BOARD.md",
     "docs/SPEC.md",
     "docs/PRIOR_FINDINGS.md",
+]
+
+KEY_RESULT_TABLES = [
+    "results/gate0_exact_dp.json",
+    "results/core_v3_sealed/tables/methods.csv",
+    "results/exp2a_online_opp/tables/methods.csv",
+    "results/exp2b_symmetric_ma/tables/matchups.csv",
 ]
 
 
@@ -48,7 +56,7 @@ def _repo_tree() -> str:
 
 def build_pack() -> str:
     sections = [
-        "# MAMRL Context Pack (For External Review / GPT Collaboration)",
+        "# MAMRL Context Pack (Lead: Antigravity | Collaborators: Codex / GPT)",
         f"- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"- Repo state: {_git_info()}",
         "- Legacy archive tag: `archive/v0.9-legacy-studies`",
@@ -67,29 +75,25 @@ def build_pack() -> str:
             sections.append(p.read_text(encoding="utf-8").strip())
             sections.append("")
 
-    # Include compact JSON summaries under results/ if present
-    json_results = sorted((ROOT / "results").rglob("*.json")) if (ROOT / "results").exists() else []
-    if json_results:
-        sections.append("---\n\n## Latest Tracked Result Summaries\n")
-        for jp in json_results[:5]:
-            rel = jp.relative_to(ROOT)
-            text = jp.read_text(encoding="utf-8")
-            if len(text) > 4000:
-                text = text[:4000] + "\n... [truncated]"
-            sections.append(f"### `{rel}`\n```json\n{text}\n```\n")
+    present_tables = [ROOT / rel for rel in KEY_RESULT_TABLES if (ROOT / rel).exists()]
+    if present_tables:
+        sections.append("---\n\n## Sealed 5-Seed Result Tables (Exp 1 / Exp 2A / Exp 2B)\n")
+        for tp in present_tables:
+            rel = tp.relative_to(ROOT)
+            lang = "json" if tp.suffix == ".json" else "csv"
+            text = tp.read_text(encoding="utf-8").strip()
+            if len(text) > 5500:
+                text = text[:5500] + "\n... [truncated; read full file in workspace]"
+            sections.append(f"### `{rel}`\n```{lang}\n{text}\n```\n")
 
     sections.extend(
         [
             "---",
             "",
-            "## Request for Independent Critic / Reviewer (Unbiased Audit)",
-            "Please review `docs/SPEC.md` against the core research goal without favoring any pre-existing hypothesis.",
-            "Specifically audit:",
-            "1. **Fairness & Confounds:** Are baselines (Greedy, Random, UCB, Memory-Reset, Masked RL², RL²) strictly unprivileged and fair?",
-            "2. **Exploration vs. Exploitation Decomposition:** Does the 3-layer protocol (Neutral Bayes Info/Value Audit + Mixed-Prefix Neutral Exploiter + Belief Probe) cleanly eliminate OOD prefix-swap bias and Student bottlenecks?",
-            "3. **Multi-Agent Validity of R3:** What is the cleanest R3 game that is genuinely multi-agent (not a disguised single-agent bandit) while keeping Gate-0 Oracle & Layer-1 Bayes exact?",
-            "4. **Falsifiability & Scope:** Are the pre-registered criteria unbiased, and is the scope realistic for 2026-12-17?",
-            "Return concrete, actionable critiques (and counter-designs if warranted) suitable for saving to `handoff/reviews/`.",
+            "## Collaboration & Review Protocol",
+            "- **Lead Agent:** `Antigravity`. Codex collaborators must check `handoff/BOARD.md` and their assigned `handoff/tasks/TASK-*.md` brief before acting.",
+            "- **Audit Focus (Current Milestone):** Exp 1 (`R0/R1/R3` fixed opponent), Exp 2A (`R3` online Q-learning / unseen Expected SARSA, Continuous vs Restored), and Exp 2B (symmetric 4-action `comp_rps` & `coop_trap`, disjoint unseen rules) are all sealed across 5 seeds.",
+            "- Return concrete, unbiased critiques or verified deliverables to the exact assigned path under `handoff/reviews/` or `handoff/reports/`.",
             "",
         ]
     )

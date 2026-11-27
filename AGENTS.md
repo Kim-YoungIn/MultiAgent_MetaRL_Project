@@ -26,9 +26,11 @@ Only three living documents govern active work:
 
 ## 3. Scientific & Engineering Integrity
 
-- **Gate 0 — Oracle Verification First:** Never run meta-training on a task distribution without first verifying via `mamrl.eval.oracle` that (a) observation has positive Value of Information (VoI > 0) and (b) optimal play strictly requires changing the opening action away from the greedy/myopic choice.
+- **Unbiased Inquiry First:** Stay strictly anchored to the core research question, never to confirming a specific user hypothesis, prior hunch, or agent proposal. Never tune environments solely to force Meta-RL to beat baselines. Pre-register falsification criteria so positive, conditional, and negative/null results are treated with equal scientific value.
+- **Gate 0 — Oracle Verification First:** Never run meta-training on a task distribution without first verifying via `mamrl.eval.oracle` what fraction of tasks have positive Value of Information (VoI > 0) and what fraction strictly require changing the opening action away from the greedy/myopic choice.
+- **Fair, Unprivileged Baselines:** Never leak privileged task specs (`spec`/payoff tables) into standard baselines (`UCB`, `Greedy`, `Random`) or `Meta-Explorer`. Use privileged Bayesian/Oracle models strictly as separate diagnostic ceilings.
 - **No Mean-Only Reporting:** Always report **Mean, Median, Win-Rate vs baselines, Early Adaptation AUC, Total Return (including exploration cost), and Counterpart Return** (to detect opponent shaping vs pure information gain).
-- **Mandatory Controls:** Compare Meta-Explorer against **Greedy/No-Explore, Random, UCB, Masked-Feedback Explorer** (same training without conditioning on feedback), and **Oracle** (upper bound). Separate **Opponent-Restored (pure information)** from **Continuous Deployment** evaluation.
+- **Mandatory Controls:** Compare Meta-Explorers (`Full`, `Masked`, and end-to-end `RL²`) against **Greedy/No-Explore, Random, Arm-Independent UCB**, and **Oracle** (diagnostic ceiling). Separate **Opponent-Restored (pure information)** from **Continuous Deployment** evaluation.
 - **No Leakage or Silent Overwrites:** Separate development and final test seeds; record config + git commit + seed in every run output; preserve negative/null findings honestly.
 
 ## 4. Multi-Agent Collaboration (GPT / Codex / Antigravity)

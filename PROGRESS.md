@@ -1,19 +1,21 @@
 # Progress Snapshot — 2026-11-27
 
 ## Objective & Stage
-- **Goal:** Study how meta-learning affects exploration and fast adaptation in multi-agent games (Path A).
+- **Goal:** Unbiased empirical inquiry into how meta-learning affects exploration and fast adaptation in multi-agent repeated games.
 - **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
-- **Stage:** Clean v2 refactor verified on branch `refactor/v2-clean` (1.7 MB tracked footprint; 6/6 tests pass). Ready for GPT review of `docs/SPEC.md` and Exp 1 calibration.
+- **Stage:** **Design Verification Gate (v2.1)**. Repository cleanly refactored on `refactor/v2-clean` (1.7 MB tracked, 6/6 core tests passing). Finalizing unbiased experimental design (`docs/SPEC.md`) before updating `src/mamrl/` and running final multi-seed experiments.
 
 ## Completed Work (Verified)
-- Tagged full legacy repo (`290dabf`, 15 verified studies) at `archive/v0.9-legacy-studies`; distilled failures into `docs/PRIOR_FINDINGS.md` and preserved key figures/tables in `results/legacy_summary/` (340 KB).
-- Rebuilt single-entry rules (`AGENTS.md`), Path-A spec (`docs/SPEC.md`), collaboration guide (`docs/COLLABORATION.md`), and GPT context packer (`scripts/pack_context.py` -> `handoff/context_pack.md`, ~20 KB).
-- Implemented clean core package (`src/mamrl/`) and verified `unittest` (6/6 OK in 2.7 s) + pilot run (`configs/pilot_active_explore.json` -> `runs/pilot_active_low.json`): Gate-0 Oracle confirmed `VoI>0 = 100%`, `must_change_opening = 100%` (`mean_VoI = 0.5030`); `greedy` trapped at `+7.99` while `meta_full` reached `+26.24` and `ucb` `+28.31`.
+- Archived full legacy repo (`290dabf`, 15 verified studies) at git tag `archive/v0.9-legacy-studies`; distilled failures into `docs/PRIOR_FINDINGS.md` and preserved key figures/tables (`results/legacy_summary/`, 340 KB).
+- Audited proposal vs. legacy studies: confirmed that prior work varied superficial size (`n=3->6`, `depth=1->5`) while *reducing* active-probing necessity (`12.5% -> 6.3%`), never cleanly testing structured partial observability or arm-independent UCB.
+- Diagnosed pilot flaw in initial v2 `students.py`: passing privileged `spec` into `BayesianRewardStudent` gave `UCB` secret model knowledge. Redesigned `docs/SPEC.md` (v2.1) with strict unprivileged baselines, R0–R3 observability/complexity regimes, `RL²` comparison, and pre-registered falsification criteria.
 
-## Active Decisions & Open Issues
-- **Pilot diagnostic finding:** With `exploit_miss = -0.70` and `probe_cost = 0.15`, gambling on `EXPLOIT` at turn 0 has higher prior mean (`+0.10`) than `PROBE` (`-0.15`), letting UCB tie/edge Oracle (`+28.31` vs `+27.96`). Calibrating risk/probe structure (e.g., deeper mismatch penalty or multi-step/opponent-contingent probe) before locking Exp 1 is the immediate design decision.
-- Legacy code stays ONLY in git tag `archive/v0.9-legacy-studies`; local `runs/` remains untouched (gitignored).
+## Active Design Verification Questions (`docs/SPEC.md` §5)
+1. How to pair cross-action probing (R3) with an unprivileged Student (e.g., meta-prior Student + end-to-end `RL²`) without biasing UCB.
+2. Simplest genuinely multi-agent R3 game (not a disguised single-agent bandit) with tractable exact Oracle.
+3. REINFORCE vs. PPO-GAE stability under noisy/multi-step regimes (R2/R3).
+4. Scope sizing for the 2026-12-17 hard deadline.
 
 ## Next Actionable Step
-1. Share `handoff/context_pack.md` with GPT to critique Exp 1 & Exp 2 calibration (`docs/SPEC.md`), especially probe vs. risky-gamble separation and H1 diversity axes.
-2. Lock Exp 1 (`Passive` vs. `Active`) and run multi-seed comparisons via `mamrl.runner`.
+1. Run `scripts/pack_context.py` and review `handoff/context_pack.md` with GPT / `research_critic` to resolve §5 open design questions and lock `docs/SPEC.md`.
+2. Implement locked v2.1 design in `src/mamrl/`, pass Gate-0 Oracle & unit tests, and run Exp 1 (R0–R3).

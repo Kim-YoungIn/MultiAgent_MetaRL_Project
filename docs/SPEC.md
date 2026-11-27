@@ -1,72 +1,91 @@
-# Active Experiment Specification (Path A — v2 Clean Core)
+# Experimental Design Specification — Design Verification Draft (v2.1)
 
-## 1. Central Thesis & Experimental Structure
-
-**Thesis:** Meta-learning improves multi-agent exploration and fast adaptation *if and only if* (1) optimal exploitation depends on hidden rule/opponent structure that passive/greedy actions cannot identify (**Active Probing Necessity**), (2) the explorer conditions on interaction feedback rather than memorizing fixed open-loop sequences, and (3) training diversity covers the structural probe-to-rule mapping without starving per-task exposure.
-
-We test this in two tightly coupled experiments runnable on a single machine well before the **2026-12-17** deadline:
-
-- **Exp 1 — Necessity Gate (Passive vs. Active Regime):** Contrast two matched multi-agent game distributions that share identical horizon, action count, and exploitation payoff scale, differing only in whether greedy play already reveals the hidden regime (`Passive`, Oracle `must_change_opening ≈ 0%`) or strictly hides it behind a costly probe (`Active`, Oracle `must_change_opening = 100%`).
-- **Exp 2 — H1 Diversity × Exposure & Opponent Dynamics:** Within the `Active` regime, vary training task diversity (`Low / Medium / High`) under **both Fixed Total Budget and Fixed Per-Task Exposure**, against **Fixed Reactive Opponents** and **Online Q-Learning Opponents**, evaluating both **Opponent-Restored (pure information)** and **Continuous Deployment**.
+> **Status:** Under design verification before locking implementation and running final experiments.
+> **Guiding Principle:** Stay strictly anchored to the core research question. Every hypothesis below is framed symmetrically so positive, conditional, and negative/null outcomes are equally informative. We do **not** tune environments solely to force Meta-RL to win.
 
 ---
 
-## 2. Benchmark Environment: `ActiveProbeGame`
+## 1. Core Research Question & Scope
 
-A clean 2-player repeated strategic game (`src/mamrl/envs/active_probe_game.py`) designed specifically to pass **Gate 0 (Oracle Verification)**:
+> **멀티에이전트 반복 게임 환경에서 메타 러닝이 탐색(exploration)을 개선하여 새로운 게임 규칙과 학습 상대에 대한 빠른 적응(fast adaptation)에 어떤 영향을 미치는가?**
 
-- **Action Space:** $n = 4$ (configurable) discrete actions per player per turn:
-  - `SAFE` (1 action): Low-variance baseline payoff $r_{\text{safe}}$, **uninformative** about the hidden regime in the Active mode.
-  - `EXPLOIT_A`, `EXPLOIT_B` (2 actions): High-stakes strategic actions whose optimal choice depends on the hidden task regime $\theta \in \{0, 1, \dots, M-1\}$ **and** the opponent's action/type. Choosing the wrong exploit action incurs a heavy mismatch penalty; choosing the right one yields high reward.
-  - `PROBE` (1 action, or multiple typed probes in higher diversity): Pays an explicit immediate exploration cost $-c_{\text{probe}} < 0$, and emits a diagnostic payoff/reaction signal depending on $(\theta, b_t)$ — i.e., **the opponent's response/action jointly shapes whether the probe succeeds and what signal is observed**.
-- **Action-Label Permutation (Diversity & Anti-Memorization):**
-  Each task instance samples a latent rule $\theta$, a probe-cost / payoff parameterization, and (optionally in `Medium`/`High` diversity) a permutation or structural mapping of probe-to-exploit roles so the agent cannot hardcode a single action index.
-- **Observation (No Leakage):**
-  At turn $t$, each player observes only `(prev_self_action, prev_opp_action, prev_self_reward, step_start_flag)` (or turn index if enabled). Hidden $\theta$, opponent identity, and horizon remain unobserved.
-- **Passive vs. Active Mode Toggle:**
-  - `mode="active"`: `SAFE` returns constant $r_{\text{safe}}$ regardless of $\theta$; only `PROBE` (or risky trial-and-error) separates $\theta$. Exact Oracle verifies `VoI > 0` and `must_change_opening = True`.
-  - `mode="passive"`: `SAFE` leaks $\theta$ through a small diagnostic payoff signature without needing a costly probe. Exact Oracle verifies `VoI > 0` and `must_change_opening = False`.
+### Two-Part Research Structure (Path A, aligned with Dec 17/20 Deliverables)
+- **Part 1 (Completed — `docs/PRIOR_FINDINGS.md`, tag `archive/v0.9-legacy-studies`):**
+  Empirical diagnosis of 15 prior studies showing why standard multi-agent meta-exploration benchmarks failed to beat UCB or improve median returns: passive/greedy actions already leaked rules (only 6/96 pairs required changing the opening move), mean gains hid median losses (`+0.446` mean vs `−0.144` median), long-horizon gains were confounded with opponent shaping (`+0.365` counterpart return), and task-count scaling at fixed compute diluted per-task exposure.
+- **Part 2 (Active Design Under Verification):**
+  Controlled multi-agent study testing **when—if ever—meta-learned exploration outperforms standard exploration**, cleanly separating (i) observability / structural complexity, (ii) pure information gain vs. opponent shaping, and (iii) task diversity vs. per-task exposure.
 
 ---
 
-## 3. Agents & Controls
+## 2. Neutral, Falsifiable Research Questions
 
-All methods share the **exact same Exploitation Student** after an exploration budget $K$ (e.g., $K \in \{2, 4, 8\}$, total horizon $T = 32$ or $48$):
+### RQ1 — Observability & Exploration Complexity
+*How does the relative adaptation performance of meta-learned exploration (vs. Greedy, Random, and Arm-Independent UCB) vary across regimes of observability and structural coupling?*
 
-1. **Exploitation Student (`src/mamrl/agents/students.py`):**
-   - Primary: **Bayesian Belief / Linear-Reward Student** (fast, zero-bottleneck posterior update over task hypotheses or action-context reward estimates — avoids the tabular Q-state sparsity bottleneck diagnosed in v0.4).
-   - Secondary check: **Online Q-Learning Student** (to verify robustness across learner classes).
-2. **Opponents (`src/mamrl/agents/opponents.py`):**
-   - `reactive`: Strategic opponent whose response depends on its hidden type and focal action (clean multi-agent interaction).
-   - `q_learning`: Online tabular Q-learning opponent that adapts simultaneously (tests non-stationarity and shaping).
-   - Every opponent supports `snapshot()` / `restore()` for controlled counterfactual evaluation.
-3. **Exploration Policies (`src/mamrl/agents/explorers.py`):**
-   - `greedy`: No separate exploration (Student plays greedily from turn 0).
-   - `random`: Uniform random exploration for $K$ turns.
-   - `ucb`: Uncertainty-bonus exploration over Student estimates for $K$ turns.
-   - `meta_full`: Meta-learned recurrent (GRU) Explorer trained via policy gradient / PPO on held-in training tasks to maximize post-exploration adaptation return (or total return incl. exploration cost).
-   - `meta_masked`: Identical architecture and training budget as `meta_full`, but **reward/opponent feedback is masked** after turn 0 (isolates true feedback-conditioned exploration from open-loop sequence memorization).
-   - `oracle`: Exact belief/VoI reference upper bound (not a competitor; calibrates benchmark headroom).
+We evaluate **four matched benchmark regimes** (same action count $n$, horizon $T$, and exploitation reward scale, verified by Gate-0 exact Oracle before training):
 
----
+| Regime | Rule Identification Structure | Expected Gate-0 Oracle | What This Tests |
+|---|---|---|---|
+| **R0: Passive Deterministic** | Greedy/safe action deterministically leaks latent rule $\theta$ (low complexity, mirrors legacy studies) | `VoI > 0`, `must_change = 0%` | Baseline control: confirms Greedy/UCB suffice when passive play reveals the rule. |
+| **R1: Active Deterministic (1-step)** | Safe action is uninformative; 1 costly probe reveals $\theta$ deterministically | `VoI > 0`, `must_change = 100%` | Tests whether 1-step active necessity alone favors Meta-RL, or whether simple UCB still matches/beats it. |
+| **R2: Active Noisy (i.i.d. Noise Control)** | Same as R1, plus symmetric Gaussian reward noise across actions | `VoI > 0`, `must_change = 100%` | **Anti-bias control:** tests whether pure stochasticity alone helps Meta-RL or hurts Meta-RL *more* than UCB via policy-gradient variance. |
+| **R3: Structured Partial Observability (Aliased / Multi-Step)** | $M \ge 4$ latent rule/opponent regimes over $n \ge 6$ actions; risky high-stakes actions incur steep mismatch penalties and are aliased/noisy, while low-cost probes (or 2-step feedback-contingent probe pairs + opponent reaction) carry high-SNR cross-action information about unvisited actions | `VoI > 0`, `must_change = 100%`, 1-step probe insufficient | Tests the core hypothesis: when $(Q, V)$ cannot be solved independently per arm in 1 step, does **feedback-conditioned Meta-Exploration** outperform arm-independent UCB and open-loop Masked exploration? |
 
-## 4. Mandatory Metrics & Evaluation Protocol
+### RQ2 — Multi-Agent Non-Stationarity: Information Gain vs. Opponent Shaping
+*Against fixed reactive opponents vs. online learning opponents (`Q-learning` / `Expected SARSA`), how much of any adaptation gain is pure information acquisition versus shaping the opponent and game state?*
 
-Every run (`src/mamrl/runner.py`) pairs all methods on the exact same held-out test games, initial seeds, and opponent states, reporting:
+- Every regime is evaluated under **two paired protocols** on identical test tasks and seeds:
+  1. **Controlled (Opponent-Restored, Frozen Assessment):** Snapshot opponent & env state before exploration; after $K$ exploration turns, keep *only* the focal Student's updated state, restore opponent/env to pre-exploration snapshot, and evaluate. Isolates pure information value.
+  2. **Continuous Deployment (Both Agents Learning):** Keep live opponent state and online learning running over $T$ turns; log both **Focal Return** and **Counterpart Return** (`both_up`, `both_down`, action shift).
 
-1. **Distribution-Aware Performance:** Mean, **Median**, IQR, and **Win-Rate (%)** vs. `greedy` and `ucb`.
-2. **Adaptation Speed:** Early-turn AUC (first $H_{\text{early}}$ assessment turns) and **Time-to-Threshold** (with right-censoring logged explicitly).
-3. **Full Economic Cost:** Exploration Return (turns $1..K$), Assessment Return (turns $K+1..T$), and **Total Return** (turns $1..T$).
-4. **Multi-Agent Shaping Decomposition:**
-   - **Controlled Evaluation:** Snapshot opponent state before exploration, restore opponent state after exploration (keeping only Student posterior), freeze both learners, measure pure information gain.
-   - **Continuous Deployment:** Keep real opponent state & online learning running, and report **Counterpart Return** alongside Focal Return.
+### RQ3 — Training Diversity (H1): Diversity vs. Exposure Dilution
+*In the regime(s) where active exploration matters, how does increasing rule & opponent diversity (`Low / Medium / High`) affect held-out adaptation?*
+
+- Explicitly separate **two compute controls**:
+  1. **Fixed Total Budget:** Total training interactions held constant while task diversity increases (mirrors realistic compute cap, tests diversity vs. exposure dilution).
+  2. **Fixed Per-Task Exposure:** Interactions per training task held constant (isolates generalization benefit of diversity from under-training).
 
 ---
 
-## 5. Pre-Registered Milestones Toward Dec 17/20
+## 3. Fair Baselines, Learners & Controls (Anti-Leakage Design)
 
-- **M1 (Done now):** Clean core architecture, Oracle gate, unit tests, and GPT handoff pipeline.
-- **M2 (Nov 28–Dec 1):** Run Gate 0 + Exp 1 (Passive vs. Active Necessity, multi-seed) and review with GPT (`handoff/reviews/`).
-- **M3 (Dec 2–Dec 7):** Run Exp 2 (H1 Diversity × Exposure × Learning Opponent + Shaping Decomposition).
-- **M4 (Dec 8–Dec 13):** Final locked multi-seed runs, publication figures, and 5-page NeurIPS report draft.
-- **M5 (Dec 14–Dec 17):** Slides, 5-min video, 3 quiz questions, and <5MB code submission zip check.
+A critical requirement from our design audit: **no baseline or learned explorer may receive privileged access to hidden task specs (`spec` / payoff tables).**
+
+### A. Unprivileged Evaluated Methods (Primary Comparison)
+All methods share the **exact same observation interface** `(prev_self_action, prev_opp_action, prev_self_reward, is_start)` and **identical Exploitation Student** (unless end-to-end):
+1. **Greedy (`greedy`)**: Student plays greedily from turn 0 (no separate exploration).
+2. **Random (`random`)**: Uniform random actions for $K$ turns, then Student exploits.
+3. **Arm-Independent UCB (`ucb`)**: Empirical per-action mean + count uncertainty bonus (`mean_a + beta * sqrt(log(t+1)/(N_a+1))`) for $K$ turns (tuned *only* on dev seeds). Does **not** know cross-action latent structure.
+4. **Meta-Explorer — Full Feedback (`meta_full`)**: Recurrent GRU exploration policy trained across training tasks (optimizing total return including exploration cost, and checked against assessment-only objective on dev).
+5. **Meta-Explorer — Masked Feedback (`meta_masked`)**: Identical architecture, optimizer, and training budget as `meta_full`, but opponent action & reward feedback are masked after turn 0. Isolates **adaptive feedback-conditioned probing** from memorized open-loop action sequences.
+6. **End-to-End Recurrent Meta-RL (`rl2`)**: Single GRU policy acting for all $T$ turns without explicit Teacher–Student split (connects directly back to the original proposal and checks whether decoupling helps or hurts).
+
+### B. Exploitation Student (Model-Free Primary + Diagnostic Ceiling)
+- **Primary Student (Unprivileged, Fair):** Fast empirical online learner (e.g., contextual / action-value ridge or tabular Q learner **without** privileged task tables, OR a shared meta-learned / empirical-Bayes prior fitted strictly on training tasks—identical across `greedy`, `random`, `ucb`, `meta_full`, `meta_masked`).
+- **Diagnostic Ceiling Only (Privileged):**
+  - **Privileged Bayesian Student** (uses true task-family likelihood) + **Oracle Explorer**: reported *strictly* as an upper-bound diagnostic to separate "Explorer failed to collect info" from "Student failed to use info."
+
+---
+
+## 4. Mandatory Metrics & Pre-Registered Decision Criteria
+
+Every evaluation runs across **$\ge 5$ independent training seeds** on a **sealed test split** (disjoint from dev tuning seeds), paired per game and reset, reporting:
+- **Focal Performance:** Mean, **Median**, IQR, and **Win-Rate (%)** vs. `greedy`, `ucb`, and `meta_masked`.
+- **Adaptation Speed:** Early-assessment AUC, Time-to-Threshold (with explicit right-censoring rate).
+- **Economic Cost:** Exploration Return ($1..K$), Assessment Return ($K+1..T$), and **Total Return** ($1..T$).
+- **Multi-Agent Shaping Check:** Counterpart Return, Controlled vs. Continuous gap.
+
+### Pre-Registered Interpretation Rules (Preventing Goalpost Moving)
+- **Evidence that Meta-Exploration genuinely accelerates adaptation:** `meta_full` outperforms `greedy`, `ucb`, AND `meta_masked` in **both Mean and Median Total Return** (95% seed/block bootstrap CI > 0, win-rate > 50%) **and** retains positive Controlled (Opponent-Restored) gain.
+- **Evidence of Conditional / Regime-Bounded Utility:** `meta_full` beats baselines in R3 (Structured Partial Observability) while matching/losing to `ucb` in R0/R1/R2 — establishing *when* meta-exploration is worth its cost.
+- **Honest Null / Negative Finding:** If `meta_full` fails to beat `ucb` or `meta_masked` even in R3 (while Oracle succeeds), diagnose via the Privileged-Student ceiling whether the bottleneck is **meta-optimization/credit assignment** vs. **Student representation**, and report it transparently.
+
+---
+
+## 5. Open Design Questions for Independent Verification (GPT / Critic Checklist)
+
+Before freezing `src/mamrl/` for final multi-seed execution, we explicitly seek critique on:
+1. **Student fairness vs. bottleneck:** In R3 (cross-action structural coupling), an arm-independent empirical Student cannot infer unvisited action B's value from probing action A unless the Student itself has cross-action generalization (e.g., meta-learned / shared-prior Student or end-to-end `RL²`). How should we pair `Meta-Explorer` with a Student in R3 so **both** (a) UCB gets a fair comparison and (b) cross-action probe information can actually be exploited?
+2. **Design of R3 (`Structured Partial Observability`):** What is the cleanest, simplest 2-player repeated game where (a) 1-step probing is insufficient or risky, (b) the opponent's action/learning genuinely matters (not a disguised single-agent bandit), and (c) exact Gate-0 Oracle remains tractable?
+3. **Training algorithm stability:** Is baseline-reduced REINFORCE sufficient for `meta_full` / `meta_masked` / `rl2`, or should we use PPO with GAE/value baseline to prevent high-variance failure in R2/R3?
+4. **Scope vs. Dec 17 Deadline:** Given 20 days until the 5-min video + quiz (Dec 17) and 23 days until the 5-page NeurIPS report (Dec 20), is the `R0–R3 × Controlled/Continuous × H1` matrix appropriately scoped, or should any axis be tightened?

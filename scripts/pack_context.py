@@ -78,6 +78,22 @@ def build_pack() -> str:
                 text = text[:4000] + "\n... [truncated]"
             sections.append(f"### `{rel}`\n```json\n{text}\n```\n")
 
+    sections.extend(
+        [
+            "---",
+            "",
+            "## Request for Independent Critic / Reviewer (Unbiased Audit)",
+            "Please review `docs/SPEC.md` against the core research goal without favoring any pre-existing hypothesis.",
+            "Specifically audit:",
+            "1. **Fairness & Confounds:** Are baselines (Greedy, Random, UCB, Masked, RL²) strictly unprivileged and fair?",
+            "2. **Multi-Agent Validity:** Is the proposed R3 benchmark genuinely multi-agent, or a disguised single-agent bandit?",
+            "3. **Student–Explorer Coupling:** How should R3 handle cross-action inference without leaking task specs?",
+            "4. **Falsifiability & Scope:** Are the pre-registered criteria unbiased, and is the scope realistic for 2026-12-17?",
+            "Return concrete, actionable critiques (and counter-designs if warranted) suitable for saving to `handoff/reviews/`.",
+            "",
+        ]
+    )
+
     return "\n".join(sections)
 
 

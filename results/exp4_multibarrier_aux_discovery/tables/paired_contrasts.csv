@@ -1,0 +1,13 @@
+contrast,metric,diff_mean,diff_median,ci_low,ci_high,win_rate,tie_rate,loss_rate,threshold,verdict
+drqn_aux_discovery_minus_drqn_aux_uniform,total_return,0.105,0.0,0.0,0.3156,0.2,0.8,0.0,0.3,INCONCLUSIVE
+drqn_aux_discovery_minus_drqn_vanilla,total_return,-0.06,0.0,-0.18,0.0,0.0,0.8,0.2,0.3,RESOLVED_NULL
+drqn_aux_discovery_minus_drqn_aux_yr,total_return,-0.06,0.0,-0.18,0.0,0.0,0.8,0.2,0.3,RESOLVED_NULL
+drqn_aux_discovery_minus_drqn_aux_r,total_return,0.06,0.0,0.0,0.18,0.2,0.8,0.0,0.3,RESOLVED_NULL
+drqn_aux_yr_minus_drqn_vanilla,total_return,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.3,RESOLVED_NULL
+drqn_aux_yr_minus_drqn_aux_yr_masked,total_return,0.18,0.0,0.0,0.54,0.2,0.8,0.0,0.3,INCONCLUSIVE
+drqn_aux_yr_minus_drqn_prior_only,total_return,0.42,0.0,0.0,1.26,0.2,0.8,0.0,0.3,INCONCLUSIVE
+drqn_aux_yr_minus_drqn_aux_r,total_return,0.12,0.0,0.0,0.36,0.2,0.8,0.0,0.3,INCONCLUSIVE
+drqn_aux_yr_minus_drqn_aux_y,total_return,2.79,0.0,0.0,7.1086,0.4,0.6,0.0,0.3,INCONCLUSIVE
+drqn_aux_y_minus_drqn_vanilla,total_return,-2.79,0.0,-7.1086,0.0,0.0,0.6,0.4,0.3,INCONCLUSIVE
+drqn_aux_discovery_minus_arm_ucb,total_return,107.54,107.6,107.42,107.6,1.0,0.0,0.0,0.3,SUPPORTED_POS
+drqn_aux_discovery_minus_greedy,total_return,49.6497,49.9,48.0556,51.2097,0.9539,0.0379,0.0082,0.3,SUPPORTED_POS

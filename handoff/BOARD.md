@@ -14,7 +14,7 @@
 
 ## Lead-Owned Protected Paths (Never Modified by Codex Workers)
 - `AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`
-- Sealed evidence: `results/core_v3_sealed/`, `results/exp2a_online_opp/`, `results/exp2b_symmetric_ma/`, `results/gate0_exact_dp.json`
+- Sealed evidence: `results/core_v3_sealed/`, `results/exp2a_online_opp/`, `results/exp2b_symmetric_ma/`, `results/exp3a_reliability_sweep/`, `results/exp3b_equivariant_semantic/`, `results/exp4_multibarrier_aux_discovery/`, `results/gate0_exact_dp.json`
 
 ## Quick Dispatch Commands
 ```bash

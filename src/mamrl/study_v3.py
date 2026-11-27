@@ -1,12 +1,13 @@
-"""Config-driven SPEC v3.0 Core Study Runner with Atomic Receipts, Resume, and CSV/JSON Exports.
+"""Config-driven SPEC v3.0 Core Study Runner with Atomic Receipts, Parallelism, Resume, and CSV/JSON Exports.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python -m mamrl.study_v3 --config configs/dev_pilot_v3.json
+    PYTHONPATH=src .venv/bin/python -m mamrl.study_v3 --config configs/core_v3_sealed.json --workers 6
 """
 
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import csv
 from datetime import datetime, timezone
 import hashlib
@@ -30,7 +31,8 @@ from mamrl.agents.baselines_v3 import (
     RandomPolicyV3,
     StructuralModelPolicyV3,
 )
-from mamrl.agents.ppo_rl2 import PPOConfig, RecurrentActorCritic, train_ppo_rl2
+from mamrl.agents.drqn_rl2 import DRQNConfig, NeuralDRQNPolicyV3, train_drqn_rl2
+from mamrl.agents.ppo_rl2 import PPOConfig, train_ppo_rl2
 from mamrl.eval.audit_v3 import (
     TrajectoryBundle,
     compute_episode_audit,
@@ -39,9 +41,20 @@ from mamrl.eval.audit_v3 import (
 )
 from mamrl.eval.exact_dp import run_gate0_audit
 
-TRAINED_NEURAL_METHODS = ("rl2", "rl2_masked", "prior_only")
-BASELINE_METHODS = ("structural_model", "contextual_ucb", "arm_ucb", "greedy", "random")
-CEILING_METHODS = ("bayes_optimal", "clairvoyant")
+PPO_METHODS = {
+    "rl2": "rl2",
+    "rl2_ppo": "rl2",
+    "rl2_masked": "rl2_masked",
+    "prior_only": "prior_only",
+}
+DRQN_METHODS = {
+    "drqn_vanilla": ("rl2", "none"),
+    "drqn_aux_y": ("rl2", "y"),
+    "drqn_aux_r": ("rl2", "r"),
+    "drqn_aux_yr": ("rl2", "yr"),
+    "drqn_aux_yr_masked": ("rl2_masked", "yr"),
+    "drqn_prior_only": ("prior_only", "none"),
+}
 
 
 def _sha256_file(path: Path) -> str:
@@ -105,13 +118,15 @@ def _load_eval_npz(path: Path, regime: str, method: str) -> TrajectoryBundle:
 
 def _run_or_load_fit(
     *,
-    out_dir: Path,
+    out_dir_str: str,
     regime: str,
     method: str,
     seed: int,
     cfg: dict,
-) -> tuple[dict, dict[str, np.ndarray]]:
+) -> tuple[str, str, int, dict, dict[str, np.ndarray]]:
     """Run one (regime, method, seed) unit or resume cleanly from verified receipt."""
+    torch.set_num_threads(1)
+    out_dir = Path(out_dir_str)
     fit_dir = out_dir / "fits" / f"{regime}_{method}_seed{seed}"
     receipt_path = fit_dir / "receipt.json"
     eval_path = fit_dir / "eval_episodes.npz"
@@ -123,17 +138,18 @@ def _run_or_load_fit(
     n_eval = int(cfg.get("n_eval_episodes", 256))
     eval_seed = int(cfg.get("eval_seed_base", 50000)) + seed * 1009
 
-    # Atomic resume check
     if receipt_path.exists() and eval_path.exists() and audit_path.exists():
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         if receipt.get("eval_sha256") == _sha256_file(eval_path):
             bundle = _load_eval_npz(eval_path, regime, method)
             audit = compute_episode_audit(bundle, audit_ks=audit_ks, primary_k=primary_k)
             saved_audit = json.loads(audit_path.read_text(encoding="utf-8"))
-            # Preserve neural linear probe accuracy from saved audit (hidden states are not stored in npz)
             if saved_audit.get("layer3", {}).get("hidden_state_linear_probe_acc"):
                 audit["layer3"]["hidden_state_linear_probe_acc"] = saved_audit["layer3"]["hidden_state_linear_probe_acc"]
             return (
+                regime,
+                method,
+                seed,
                 {
                     "receipt": receipt,
                     "end_to_end": audit["end_to_end"],
@@ -150,10 +166,11 @@ def _run_or_load_fit(
     offline_transitions = 0
     record_hidden = False
 
-    if method in TRAINED_NEURAL_METHODS:
+    if method in PPO_METHODS:
+        ppo_variant = PPO_METHODS[method]
         ppo_cfg = PPOConfig(
             regime=regime,
-            variant=method,
+            variant=ppo_variant,
             mask_k=primary_k,
             horizon=horizon,
             hidden_dim=int(cfg.get("hidden_dim", 64)),
@@ -182,10 +199,50 @@ def _run_or_load_fit(
         _write_csv(fit_dir / "train_curve.csv", train_curve)
         policy: BatchPolicyV3 = NeuralRL2PolicyV3(
             model,
-            variant=method,
+            variant=ppo_variant,
             horizon=horizon,
             mask_k=primary_k,
             deterministic=bool(cfg.get("eval_deterministic", False)),
+            offline_train_transitions=offline_transitions,
+            device=str(cfg.get("device", "cpu")),
+        )
+        policy.name = method
+        record_hidden = True
+    elif method in DRQN_METHODS:
+        drqn_variant, aux_mode = DRQN_METHODS[method]
+        drqn_cfg = DRQNConfig(
+            regime=regime,
+            variant=drqn_variant,
+            aux_mode=aux_mode,
+            mask_k=primary_k,
+            horizon=horizon,
+            hidden_dim=int(cfg.get("hidden_dim", 64)),
+            batch_episodes=int(cfg.get("drqn_batch_episodes", 64)),
+            n_iters=int(cfg.get("drqn_iters", 450)),
+            warmup_iters=int(cfg.get("drqn_warmup_iters", 100)),
+            replay_capacity=int(cfg.get("drqn_replay_capacity", 8192)),
+            grad_steps_per_iter=int(cfg.get("drqn_grad_steps", 8)),
+            minibatch_episodes=int(cfg.get("drqn_minibatch", 128)),
+            gamma=float(cfg.get("gamma", 1.0)),
+            lr=float(cfg.get("drqn_lr", 3e-3)),
+            polyak_tau=float(cfg.get("drqn_polyak_tau", 0.05)),
+            aux_y_weight=float(cfg.get("drqn_aux_y_weight", 2.0)),
+            aux_r_weight=float(cfg.get("drqn_aux_r_weight", 1.0)),
+            log_interval=int(cfg.get("drqn_log_interval", 15)),
+            seed=seed,
+            device=str(cfg.get("device", "cpu")),
+        )
+        qnet, train_curve, offline_transitions = train_drqn_rl2(drqn_cfg)
+        ckpt_path = fit_dir / "checkpoint.pt"
+        torch.save({"state_dict": qnet.state_dict(), "drqn_config": drqn_cfg.__dict__}, ckpt_path)
+        ckpt_sha = _sha256_file(ckpt_path)
+        _write_csv(fit_dir / "train_curve.csv", train_curve)
+        policy = NeuralDRQNPolicyV3(
+            qnet,
+            name=method,
+            variant=drqn_variant,
+            horizon=horizon,
+            mask_k=primary_k,
             offline_train_transitions=offline_transitions,
             device=str(cfg.get("device", "cpu")),
         )
@@ -246,26 +303,24 @@ def _run_or_load_fit(
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
     _atomic_write_json(receipt_path, receipt)
-    return {"receipt": receipt, **audit_clean}, audit["episode_arrays"]
+    return regime, method, seed, {"receipt": receipt, **audit_clean}, audit["episode_arrays"]
 
 
-def run_study_v3(cfg: dict) -> dict:
+def run_study_v3(cfg: dict, workers: int = 1) -> dict:
     """Execute full SPEC v3.0 study and export summary JSON + CSV tables."""
     study_id = str(cfg["study_id"])
     out_dir = Path(cfg.get("output_dir", f"runs/{study_id}"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     regimes = [str(r) for r in cfg.get("regimes", ["R0", "R1", "R3"])]
-    methods = [str(m) for m in cfg.get("methods", list(TRAINED_NEURAL_METHODS) + list(BASELINE_METHODS) + list(CEILING_METHODS))]
+    methods = [str(m) for m in cfg["methods"]]
     seeds = [int(s) for s in cfg.get("seeds", [101, 102])]
     horizon = int(cfg.get("horizon", 24))
-    primary_k = int(cfg.get("primary_k", 4))
     audit_ks = tuple(int(k) for k in cfg.get("audit_ks", [2, 4, 8]))
     n_boot = int(cfg.get("n_bootstrap", 10000))
     delta_info = float(cfg.get("delta_info", 0.25))
     delta_total = float(cfg.get("delta_total", 0.30))
 
-    # Gate 0 verification for every regime before training
     gate0 = {reg: run_gate0_audit(reg, horizon=horizon, audit_ks=(1, 2, 4, 8)).to_summary_dict() for reg in regimes}
 
     manifest = {
@@ -279,6 +334,30 @@ def run_study_v3(cfg: dict) -> dict:
         "gate0": gate0,
     }
     _atomic_write_json(out_dir / "manifest.json", manifest)
+
+    # Execute all (regime, method, seed) jobs (parallel if workers > 1)
+    jobs = [(reg, m, s) for reg in regimes for m in methods for s in seeds]
+    collected: dict[tuple[str, str, int], tuple[dict, dict[str, np.ndarray]]] = {}
+
+    if workers <= 1:
+        for reg, m, s in jobs:
+            r_, m_, s_, rec, arrs = _run_or_load_fit(
+                out_dir_str=str(out_dir), regime=reg, method=m, seed=s, cfg=cfg
+            )
+            collected[(r_, m_, s_)] = (rec, arrs)
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            futs = [
+                ex.submit(_run_or_load_fit, out_dir_str=str(out_dir), regime=reg, method=m, seed=s, cfg=cfg)
+                for reg, m, s in jobs
+            ]
+            done = 0
+            for fut in as_completed(futs):
+                r_, m_, s_, rec, arrs = fut.result()
+                collected[(r_, m_, s_)] = (rec, arrs)
+                done += 1
+                if done % 15 == 0 or done == len(jobs):
+                    print(f"  [{study_id}] progress: {done}/{len(jobs)} fits done", flush=True)
 
     results_by_regime: dict[str, dict] = {}
     method_rows: list[dict] = []
@@ -302,12 +381,11 @@ def run_study_v3(cfg: dict) -> dict:
 
         for m in methods:
             for s in seeds:
-                rec, arrs = _run_or_load_fit(out_dir=out_dir, regime=reg, method=m, seed=s, cfg=cfg)
+                rec, arrs = collected[(reg, m, s)]
                 per_method_records[m].append(rec)
                 for k_arr in per_method_arrays[m]:
                     per_method_arrays[m][k_arr].append(arrs[k_arr])
 
-        # Aggregate per-method metrics across seeds
         agg_methods: dict[str, dict] = {}
         for m in methods:
             recs = per_method_records[m]
@@ -424,16 +502,24 @@ def run_study_v3(cfg: dict) -> dict:
                     }
                 )
 
-        # Primary Paired Hierarchical Contrasts (rl2 vs key baselines & controls)
         contrasts: dict[str, dict] = {}
         contrast_pairs = [
+            ("drqn_aux_yr", "drqn_aux_yr_masked"),
+            ("drqn_aux_yr", "drqn_prior_only"),
+            ("drqn_aux_yr", "drqn_vanilla"),
+            ("drqn_aux_yr", "drqn_aux_y"),
+            ("drqn_aux_yr", "drqn_aux_r"),
+            ("drqn_aux_y", "drqn_vanilla"),
+            ("drqn_aux_r", "drqn_vanilla"),
+            ("drqn_aux_yr", "rl2_ppo"),
+            ("drqn_aux_yr", "structural_model"),
+            ("drqn_aux_yr", "contextual_ucb"),
+            ("drqn_aux_yr", "arm_ucb"),
+            ("drqn_aux_yr", "greedy"),
+            ("drqn_aux_yr", "random"),
             ("rl2", "rl2_masked"),
             ("rl2", "prior_only"),
             ("rl2", "contextual_ucb"),
-            ("rl2", "structural_model"),
-            ("rl2", "arm_ucb"),
-            ("rl2", "greedy"),
-            ("rl2", "random"),
             ("structural_model", "contextual_ucb"),
         ]
         metric_specs = [
@@ -502,17 +588,20 @@ def run_study_v3(cfg: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run SPEC v3.0 Core/Dev Study.")
     parser.add_argument("--config", required=True, help="Path to JSON study config.")
+    parser.add_argument("--workers", type=int, default=None, help="Override parallel worker count.")
     args = parser.parse_args()
 
     cfg = json.loads(Path(args.config).read_text(encoding="utf-8"))
-    summary = run_study_v3(cfg)
+    workers = args.workers if args.workers is not None else int(cfg.get("workers", 1))
+    t0 = time.perf_counter()
+    summary = run_study_v3(cfg, workers=workers)
     out_dir = cfg.get("output_dir", f"runs/{cfg['study_id']}")
-    print(f"[{cfg['study_id']}] Complete -> {out_dir}/summary.json")
+    print(f"[{cfg['study_id']}] Complete in {time.perf_counter() - t0:.1f}s -> {out_dir}/summary.json")
     for reg, data in summary["regimes"].items():
         print(f"\n=== {reg} (Bayes-Opt={data['gate0']['bayes_optimal_value']:.3f}, Blind={data['gate0']['blind_value']:.3f}) ===")
         for m, md in data["methods"].items():
             print(
-                f"  {m:17s} | Ret mean={md['total_mean']:+6.3f} med={md['total_median']:+6.3f} "
+                f"  {m:19s} | Ret mean={md['total_mean']:+6.3f} (sd={md['total_seed_sd']:4.2f}) med={md['total_median']:+6.3f} "
                 f"| L1_K4 adapt={md['layer1_k4_adaptive_mean']:+6.3f} commit={md['layer1_k4_commitment_mean']:+6.3f} "
                 f"| L3_gap={md['layer3_k4_live_gap_mean']:+5.3f} "
                 f"| probe={md['behavior']['opening_probe_rate']:.2f} tv={md['behavior']['k4_branching_tv']:.2f} "

@@ -3,16 +3,15 @@
 ## Objective & Stage
 - **Goal:** Unbiased empirical inquiry into how meta-learning affects exploration and fast adaptation in multi-agent repeated games.
 - **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
-- **Stage:** **Dev Pilot Complete & Major Mechanistic Breakthrough Verified (18/18 tests OK)**. Ready to integrate `Aux-DRQN` (Full / Masked / Prior-Only) into `study_v3.py`, run 5-seed Sealed Core (Exp 1), and proceed to Exp 2A/2B.
+- **Stage:** **Exp 1 (Sealed 5-Seed Core, `R0/R1/R3`, 210/210 fits) COMPLETE & VERIFIED (`results/core_v3_sealed/`, repo `2.4 MB`)**. Ready for Exp 2A (Online Q-Learning / SARSA Opponents) and Exp 2B (Symmetric Competition & Cooperation Matchups).
 
-## Completed Work (Verified)
-- Finalized `docs/SPEC.md` (v3.0 §7 logging/statistics + Exp 2B $d$-bit held-out compositional rules) and implemented `ppo_rl2.py`, `baselines_v3.py`, `audit_v3.py`, `study_v3.py`, and `tests/test_v3_pipeline.py` (18/18 unit tests pass in `6.2 s`; exact float64 resume invariance verified).
-- **Dev Pilot (`runs/dev_pilot_v3`) + Representation Diagnostic Results (`T=24`):**
-  - **Online non-meta baselines** (`Random`, `Contextual UCB`, `Arm-UCB`, `Greedy`): `-23.4` to `+0.06` across `R0/R1/R3` (catastrophic `-2.0` penalties under unguided exploration).
-  - **Vanilla reward-only Meta-RL** (`RL²-PPO` at `2^18` & `2^20` w/ entropy annealing, and vanilla `DRQN`): collapsed to safe local optimum **`+4.800`** (`S-S-S-S`, `rep = 1.00/1.00`) across `R0/R1/R3` because rare `+1.0` exploitation (`0.39%` of random steps) cannot train hidden belief representations before policy collapse.
-  - **Self-Supervised Predictive Meta-RL (`Aux-DRQN`: unprivileged GRU-64 + next `(y, r)` prediction head):** broke the barrier completely — **R0 `+20.200`** (100% Bayes-Opt), **R1 `+18.800`** (98.4% Bayes-Opt, `probe=1.00`), **R3 `+17.575`** (**100.0% exact Bayes-Optimal!**, `med=+17.300`, `L1_K4=+17.000`, `L3_gap=0.000`, `probe=1.00`, `tv=1.00`, `rep(E/X)=0.08/0.97`, autonomously discovering the exact asymmetric `P1 → P0 → {X11 | P→X01 | P→S}` tree in `46 s` CPU).
-  - **Model-Based Structural Meta-RL (`structural_model`: unlabeled EM + belief lookahead):** **R0 `+20.200`**, **R1 `+19.100`**, **R3 `+17.513`** (99.6% Bayes-Opt) using 10–25× fewer offline transitions (`24,576`).
+## Verified Exp 1 Results (`results/core_v3_sealed/`, 5 sealed seeds `1001..1005`, `n_eval=512`, `10k` bootstrap)
+- **R0 (`Opt=20.20`) / R1 (`Opt=19.10`) / R3 (`Opt=17.575`):**
+  - `drqn_aux_yr` (unprivileged GRU-64 + self-supervised `y,r`): **`+20.200 ± 0.00` / `+19.100 ± 0.00` / `+17.520 ± 0.12`** (99.7% Bayes-Opt; R3 `L1_K4 commit=+17.000`, `L3_gap=0.000`, `probe=1.00`, `tv=1.00`, `rep(E/X)=0.07/0.97`).
+  - **Feedback Conditioning (`R3: drqn_aux_yr − masked`):** Total `+1.570 [+1.443, +1.678]` (`SUPPORTED_POS`, 100% win), Layer-1 commitment `+10.400 [+9.598, +11.725]` (`SUPPORTED_POS`), net cost-inclusive `+0.840 [+0.717, +0.955]` (`SUPPORTED_POS`).
+  - **Auxiliary Signal Ablation (`R3`):** `drqn_vanilla` (pure reward) reached `+12.930 ± 4.32` (med `+16.900`, `probe=1.00`) — breaking the `all-S` trap where on-policy `rl2_ppo` collapsed (`+4.800 ± 0.00`), but with high seed variance. `drqn_aux_r` (`+12.215 ± 3.71`) did not help; **`drqn_aux_y` (`+16.795 ± 1.47`, `L1_K4=+17.000`)** unlocked 100% exploration info; combining `y+r` (`+17.520 ± 0.12`) cut seed SD 36× (`SUPPORTED_POS` vs `vanilla`: `+4.590 [+1.298, +7.863]`).
+  - **Model-Based & Online Baselines (`R3`):** `structural_model` matched `drqn_aux_yr` (`+17.500 ± 0.07`, `RESOLVED_NULL`); `contextual_ucb` (`-20.73`), `arm_ucb` (`-7.30`), `greedy` (`-0.13`), `random` (`-23.22`) all lost decisively (`SUPPORTED_POS` across all 4 metrics).
 
 ## Next Actionable Step
-1. Add clean `Aux-DRQN` (`aux_drqn`, `aux_drqn_masked`, `aux_drqn_prior_only`) to `src/mamrl/` + unit tests, lock 5-seed Sealed Core config (`configs/core_v3_sealed.json`), and run Exp 1.
-2. Extend to Exp 2A (`R3` × online Q-learning / unseen Expected SARSA opponents) and Exp 2B ($d$-bit held-out compositional rules & Hamming distance).
+1. Implement & run **Exp 2A** (`R3` × online Q-learning / unseen Expected SARSA opponents, Restored vs. Continuous) and **Exp 2B** (Symmetric 4-action Competition & Cooperation games: `Non-Meta vs. Non-Meta`, `Meta vs. Non-Meta`, `Meta vs. Meta`).
+2. Keep **Auxiliary Task Discovery** (`보조 목표 탐색`) as the top-priority extension after Exp 2A/2B.

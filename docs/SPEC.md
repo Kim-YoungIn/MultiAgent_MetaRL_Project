@@ -52,13 +52,14 @@ Implemented in `src/mamrl/envs/delayed_response.py` (exact scalar + vectorized b
 
 **Zero test-task `spec` leakage:** No evaluated agent receives $\theta$ or $f_\theta$. Offline training transitions and online test interactions are reported separately.
 
-### Core Evaluated Policies (5 Independent Training Seeds for All Learned Agents)
-1. **`rl2` (Primary Meta-Learner):** Standard GRU Actor-Critic trained with **PPO + GAE** ($\gamma = 1.0$, $\lambda \approx 0.95$, full episode sequences, undiscounted total return). Input: `(one_hot(prev_a), one_hot(prev_y), prev_r, is_start, reset_flag, turn_frac)`.
-2. **`rl2_masked` (Early-Masked Control):** Identical GRU + PPO+GAE trained **under its own mask** for $t < K_{\text{audit}}$ (hiding opponent action & reward for $t < K$, **no retrospective revelation**; begins observing live feedback at $t \ge K$).
-3. **`prior_only` (True Zero-Shot Blind Control):** Identical training budget with **no feedback inputs at any turn** (time/self-action only). *(Distinct from Memory-1 reset, which retains 1-step feedback.)*
-4. **`contextual_ucb` (State-Action UCB Baseline):** Unprivileged UCB over `(q, a)` pairs, hyperparameter tuned strictly on dev seeds.
-5. **`structural_model` (Meta-Trained Structural Baseline):** Unprivileged empirical transition/reward model $\hat{P}(y \mid q), \hat{r}(q,a,y)$ fitted on the **same offline meta-training rollouts** (no `spec` access), paired with online posterior/Thompson or UCB action selection during test episodes.
-6. **`arm_ucb`, `greedy`, `random`:** Standard stateless/myopic reference baselines.
+### Core Evaluated Policies (5 Independent Sealed Training Seeds: `1001..1005`)
+1. **`rl2_ppo` (On-Policy Pure-Reward `RL²`):** Standard GRU Actor-Critic trained with **PPO + GAE** ($\gamma = 1.0$, $\lambda \approx 0.95$, full episode sequences, undiscounted total return, zero auxiliary losses).
+2. **`drqn_vanilla` (Off-Policy Pure-Reward `RL²`):** Identical GRU-64 trained with Double-DQN + Polyak target updates, zero auxiliary losses.
+3. **Self-Supervised Auxiliary Signal Ablations (`drqn_aux_y`, `drqn_aux_r`, `drqn_aux_yr`):** Identical unprivileged GRU-64 + Double-DQN adding self-supervised prediction of public `(next_y)`, `(next_r)`, or both `(next_y, next_r)` — directly testing *which* auxiliary signal unlocks active exploration.
+4. **`drqn_aux_yr_masked` / `rl2_masked` (Early-Masked Controls):** Identical architecture trained **under its own mask** for $t < K_{\text{audit}}$ (hiding opponent action & reward, **no retrospective revelation**, auxiliary loss also masked for $t < K_{\text{audit}}$).
+5. **`drqn_prior_only` / `prior_only` (True Zero-Shot Blind Controls):** Identical training budget with **no feedback inputs at any turn** (and no auxiliary feedback loss).
+6. **`structural_model` (Meta-Trained Structural Baseline):** Unprivileged empirical EM latent-cluster model $\hat{P}_m(y \mid q), \hat{r}(q,a,y)$ fitted on unlabeled offline rollouts (no `spec` access), paired with online belief lookahead.
+7. **`contextual_ucb`, `arm_ucb`, `greedy`, `random`:** Strictly unprivileged online baselines.
 
 ### Diagnostic Ceilings (Privileged — Never Compared as Baselines)
 - **`bayes_optimal`:** Exact rational DP policy starting from uniform prior over $\theta \in \{0,1,2,3\}$ (true achievable ceiling under fixed reactive opponent).
@@ -103,7 +104,8 @@ Implemented in `src/mamrl/eval/exact_dp.py` using exact rational arithmetic (`fr
 |---|---|---|
 | **Core (Exp 1 — Mandatory)** | `R0, R1, R3` (`d=2` bits, 4 types) × Fixed Reactive Opponent × 5 seeds (`rl2`, `rl2_masked`, `prior_only`, `contextual_ucb`, `structural_model`, `arm_ucb`, `greedy`, `random`, `bayes_optimal`, `clairvoyant`) | 3 trained agents × 3 regimes × 5 seeds = **45 fits** (`2^18` dev pilot → up to `2^20` locked). Runs in minutes on local CPU multiprocessing. |
 | **Secondary A (Exp 2A — Multi-Agent Non-Stationarity)** | `R3` × Online Q-Learning / Unseen Expected SARSA Opponents (zero-shot transfer + matched training; Restored vs. Continuous with visible reset indicator + Counterpart Return) | 15 fits (matched) + zero-shot eval. Bounded/approximate diagnostics (no false exact full-horizon Oracle claim). |
-| **Secondary B (Exp 2B — Unseen Compositional Rules & Distance)** | $d$-bit ($d=3$ or $4$, 8–16 types) linear/null-space sensing extension of Delayed-Response with **strictly held-out unseen $\theta$ combinations** and quantitative **Hamming-distance generalization** analysis | Directly addresses 4-type memorization risk and quantitative rule-distance without reviving ad-hoc DSLs. |
+| **Secondary B (Exp 2B — Symmetric Multi-Agent Competition & Cooperation + Unseen Rules)** | Symmetric 2-player 4-action repeated games (hidden cyclic-dominance competition + hidden coordination/trap mixed-motive, strictly held-out unseen test rules) comparing **`Non-Meta vs. Non-Meta`**, **`Meta vs. Non-Meta`**, and **`Meta vs. Meta`** matchups | Directly validates true multi-agent competition/cooperation & unseen-game generalization without altering Exp 1. |
+| **Priority Extension (Post-Core/Secondary — Auxiliary Task Discovery)** | **"보조 목표 탐색 (Auxiliary Task Discovery / Meta-Learning Auxiliary Objectives)"** (Veeriah et al. 2019; Zheng et al. 2018): meta-learning *which* auxiliary prediction objectives or learned loss gates are useful rather than hand-selecting `pred_y`/`pred_r` | Top-priority extension once Exp 1 (aux ablation baseline) and Exp 2A/2B are cleanly sealed and verified. |
 | **Optional (Only If Time Permits)** | `R2` (categorical observation noise), `Layer 2` (cross-fitted mixed exploiter), `H1` exposure-vs-budget split | Drop before ever cutting independent training seeds below 5. |
 
 ### Milestones

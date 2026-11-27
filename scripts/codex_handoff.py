@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 from fnmatch import fnmatch
+import os
 from pathlib import Path
 import re
 import shutil
@@ -172,15 +173,29 @@ def create_task_brief(
     return out_path
 
 
-def detect_openai_codex_binary() -> tuple[str | None, str]:
-    """Locate a genuine OpenAI Codex CLI binary (rejecting unrelated PyPI 'codex' comic server)."""
+def detect_openai_codex_binary() -> tuple[str | None, str, dict[str, str]]:
+    """Locate a genuine OpenAI Codex CLI binary (including nvm installs), rejecting PyPI 'codex'."""
     candidates: list[str] = []
     for name in ("codex", "codex.exe"):
         found = shutil.which(name)
         if found:
             candidates.append(found)
+    # Also scan ~/.nvm/versions/node/*/bin/codex (newest first) and ~/.npm-global/bin/codex
+    home = Path.home()
+    nvm_bins = sorted((home / ".nvm" / "versions" / "node").glob("*/bin/codex"), reverse=True)
+    candidates.extend(str(p) for p in nvm_bins)
+    for extra in (home / ".npm-global" / "bin" / "codex", home / ".local" / "bin" / "codex", Path("/usr/local/bin/codex")):
+        if extra.exists():
+            candidates.append(str(extra))
+
+    seen: set[str] = set()
     for cand in candidates:
+        if cand in seen:
+            continue
+        seen.add(cand)
         p = Path(cand)
+        if not p.exists():
+            continue
         # Guard against Python console_script from PyPI 'codex' (comic-book server)
         try:
             head = p.read_bytes()[:256]
@@ -188,19 +203,34 @@ def detect_openai_codex_binary() -> tuple[str | None, str]:
                 continue
         except OSError:
             pass
+        env = os.environ.copy()
+        bin_dir = str(p.parent)
+        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         try:
-            res = subprocess.run([cand, "--version"], capture_output=True, text=True, timeout=5)
+            res = subprocess.run([cand, "--version"], capture_output=True, text=True, timeout=5, env=env)
             out = (res.stdout + "\n" + res.stderr).strip()
             if res.returncode == 0 and "codex" in out.lower():
-                return cand, out
+                return cand, out, env
         except Exception:
             continue
-    return None, "OpenAI Codex CLI (@openai/codex) not found on PATH (note: .venv/bin/codex is PyPI comic server if installed via pip)."
+    return None, "OpenAI Codex CLI (@openai/codex) not found on PATH or ~/.nvm.", os.environ.copy()
 
 
-def build_codex_prompt(task_info: dict, root: Path = ROOT) -> str:
+def load_role_config(role: str, root: Path = ROOT) -> dict:
+    p = root / ".codex" / "agents" / f"{role}.toml"
+    if not p.exists():
+        return {}
+    return tomllib.loads(p.read_text(encoding="utf-8"))
+
+
+def build_codex_prompt(task_info: dict, root: Path = ROOT, output_via_flag: bool = False) -> str:
     rel_brief = task_info["path"].relative_to(root)
     allowed_str = ", ".join(task_info["allowed_paths"]) or "(none - read-only)"
+    deliver_line = (
+        f"5. Return the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
+        if output_via_flag and task_info["allowed_paths"]
+        else f"5. Deliver your verified report to the assigned path in `{rel_brief}`."
+    )
     return (
         f"You are collaborating on this repository under the Lead Agent (Antigravity) using role `{task_info['role']}`.\n"
         f"1. Read `AGENTS.md`, `handoff/BOARD.md`, `.codex/agents/{task_info['role']}.toml`, and `{rel_brief}` first.\n"
@@ -208,7 +238,7 @@ def build_codex_prompt(task_info: dict, root: Path = ROOT) -> str:
         f"3. TOKEN EFFICIENCY: Read only compact CSV tables/files listed in `{rel_brief}`; skip `runs/` and full `summary.json` unless strictly needed; keep your report concise (<= 120 lines).\n"
         f"4. Do NOT modify Lead-owned governance files (`AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`) "
         f"or sealed `results/` directories, and do NOT run `git commit`.\n"
-        f"5. Deliver your verified report to the assigned path in `{rel_brief}`."
+        f"{deliver_line}"
     )
 
 
@@ -314,21 +344,38 @@ def main() -> int:
 
     if args.cmd == "run":
         info = parse_task_brief(find_task_file(args.id))
-        prompt = build_codex_prompt(info)
-        bin_path, detail = detect_openai_codex_binary()
+        bin_path, detail, env = detect_openai_codex_binary()
         if bin_path is None:
             print(f"[BLOCKED] {detail}", file=sys.stderr)
             print("Install OpenAI Codex CLI via: npm install -g @openai/codex", file=sys.stderr)
             print("\n--- Fallback Copy-Paste Prompt ---")
-            print(prompt)
+            print(build_codex_prompt(info))
             return 2
-        cmd = [bin_path, "exec", "--cd", str(ROOT), prompt]
+
+        role_cfg = load_role_config(info["role"])
+        is_report_only = bool(info["allowed_paths"]) and all(
+            p.startswith(("handoff/reviews/", "handoff/reports/")) for p in info["allowed_paths"]
+        )
+        sandbox_mode = "read-only" if is_report_only else "workspace-write"
+        prompt = build_codex_prompt(info, output_via_flag=is_report_only)
+
+        cmd = [bin_path, "exec", "-C", str(ROOT), "-s", sandbox_mode, "--ephemeral"]
+        if role_cfg.get("model"):
+            cmd.extend(["-m", str(role_cfg["model"])])
+        if role_cfg.get("model_reasoning_effort"):
+            cmd.extend(["-c", f'model_reasoning_effort="{role_cfg["model_reasoning_effort"]}"'])
+        if is_report_only:
+            out_file = ROOT / info["allowed_paths"][0]
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["-o", str(out_file)])
+        cmd.append(prompt)
+
         if args.dry_run:
-            print(f"[DRY-RUN] binary={bin_path} ({detail})")
-            print("Command:", cmd[:4], "<prompt>")
+            print(f"[DRY-RUN] binary={bin_path} ({detail}) sandbox={sandbox_mode}")
+            print("Command:", " ".join(cmd[:-1]), "<prompt>")
             return 0
-        print(f"[RUN] {bin_path} ({detail}) -> {info['task_id']} ({info['role']})", flush=True)
-        return subprocess.call(cmd, cwd=ROOT)
+        print(f"[RUN] {bin_path} ({detail}) -> {info['task_id']} ({info['role']}, sandbox={sandbox_mode})", flush=True)
+        return subprocess.call(cmd, cwd=ROOT, env=env)
 
     if args.cmd == "check-scope":
         info = parse_task_brief(find_task_file(args.id))

@@ -8,7 +8,7 @@
 
 | Task ID | Role | Status | Brief | Allowed Write Paths | Expected Report |
 |---|---|---|---|---|---|
-| `TASK-001` | `research_critic` | `OPEN` | `handoff/tasks/TASK-001_exp1_2a_2b_audit.md` | `handoff/reviews/20261127_exp1_2a_2b_audit.md` | `handoff/reviews/20261127_exp1_2a_2b_audit.md` |
+| `TASK-001` | `research_critic` | `REVIEWED` | `handoff/tasks/TASK-001_exp1_2a_2b_audit.md` | `handoff/reviews/20261127_exp1_2a_2b_audit.md` | `handoff/reviews/20261127_exp1_2a_2b_audit.md` |
 | `TASK-002` | `validator` | `OPEN` | `handoff/tasks/TASK-002_contract_audit.md` | `handoff/reports/TASK-002_contract_audit_report.md` | `handoff/reports/TASK-002_contract_audit_report.md` |
 | `TASK-003` | `results_analyst` | `OPEN` | `handoff/tasks/TASK-003_legacy_bridge_and_insights.md` | `handoff/reports/TASK-003_legacy_bridge_and_insights.md` | `handoff/reports/TASK-003_legacy_bridge_and_insights.md` |
 

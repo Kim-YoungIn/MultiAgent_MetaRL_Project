@@ -14,7 +14,9 @@
 | `TASK-003` | Codex CLI | `results_analyst` | `REVIEWED` | `handoff/tasks/TASK-003_legacy_bridge_and_insights.md` | `handoff/reports/TASK-003_legacy_bridge_and_insights.md` | `handoff/reports/TASK-003_legacy_bridge_and_insights.md` |
 | `TASK-004` | Codex CLI | `research_critic` | `REVIEWED` | `handoff/tasks/TASK-004_exp3_4_interim_audit.md` | `handoff/reviews/20261127_exp3_4_interim_audit.md` | `handoff/reviews/20261127_exp3_4_interim_audit.md` |
 | `TASK-005` | Codex CLI | `validator` | `REVIEWED` | `handoff/tasks/TASK-005_exp3_4_contract_audit.md` | `handoff/reports/TASK-005_exp3_4_contract_audit.md` | `handoff/reports/TASK-005_exp3_4_contract_audit.md` |
-| `TASK-006` | Antigravity-Claude | `claude_analyst` | `OPEN` | `handoff/tasks/TASK-006_claude_interim_design_review.md` | `handoff/reports/TASK-006_claude_interim_design_review.md` | `handoff/reports/TASK-006_claude_interim_design_review.md` |
+| `TASK-006` | Antigravity-Claude | `claude_analyst` | `REVIEWED` | `handoff/tasks/TASK-006_claude_interim_design_review.md` | `handoff/reports/TASK-006_claude_interim_design_review.md` | `handoff/reports/TASK-006_claude_interim_design_review.md` |
+| `TASK-007` | Codex CLI | `research_critic` | `REVIEWED` | `handoff/tasks/TASK-007_codex_project_discussion.md` | `handoff/reviews/20261128_codex_project_discussion.md` | `handoff/reviews/20261128_codex_project_discussion.md` |
+| `TASK-008` | Antigravity-Claude | `claude_analyst` | `REVIEWED` | `handoff/tasks/TASK-008_claude_project_discussion.md` | `handoff/reports/TASK-008_claude_project_discussion.md` | `handoff/reports/TASK-008_claude_project_discussion.md` |
 
 ## Lead-Owned Protected Paths (Never Modified by Collaborators)
 - `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`
@@ -25,7 +27,7 @@
 .venv/bin/python scripts/pack_context.py --slim
 .venv/bin/python scripts/codex_handoff.py status
 .venv/bin/python scripts/codex_handoff.py run --id TASK-004
-.venv/bin/python scripts/codex_handoff.py run --id TASK-006 --model <claude-model-id>
+.venv/bin/python scripts/codex_handoff.py run --id TASK-006   # defaults to claude-opus-5-5-high (analyst) / claude-sonnet-5-5-high (architect)
 .venv/bin/python scripts/codex_handoff.py prompt --id TASK-006
 .venv/bin/python scripts/codex_handoff.py check-scope --id TASK-006
 ```

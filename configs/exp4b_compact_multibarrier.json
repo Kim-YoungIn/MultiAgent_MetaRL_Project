@@ -1,0 +1,38 @@
+{
+  "study_id": "exp4b_compact_multibarrier",
+  "seeds": [1001, 1002, 1003, 1004, 1005],
+  "n_eval_episodes": 512,
+  "n_bootstrap": 10000,
+  "delta_return": 0.30,
+  "r3_distractor": {
+    "horizon": 24,
+    "hidden_dim": 64,
+    "batch_episodes": 64,
+    "n_iters": 450,
+    "warmup_iters": 100,
+    "replay_capacity": 8192,
+    "grad_steps_per_iter": 8,
+    "minibatch_episodes": 128,
+    "gamma": 1.0,
+    "lr": 0.003,
+    "aux_scale": 3.0,
+    "meta_gate_lr": 0.35
+  },
+  "stage_lock": {
+    "horizon": 48,
+    "mask_k": 8,
+    "hidden_dim": 64,
+    "batch_episodes": 48,
+    "n_iters": 450,
+    "warmup_iters": 90,
+    "replay_capacity": 6144,
+    "grad_steps_per_iter": 6,
+    "minibatch_episodes": 96,
+    "gamma": 0.99,
+    "lr": 0.003,
+    "aux_scale": 2.0,
+    "meta_gate_lr": 0.35
+  },
+  "output_dir": "runs/exp4b_compact_multibarrier",
+  "results_dir": "results/exp4b_compact_multibarrier"
+}

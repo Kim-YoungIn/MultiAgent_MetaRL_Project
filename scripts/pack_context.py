@@ -39,6 +39,9 @@ KEY_RESULT_TABLES = [
     "results/exp3a_reliability_sweep/tables/coop_trap_dynamics.csv",
     "results/exp3b_equivariant_semantic/tables/matchups.csv",
     "results/exp4_multibarrier_aux_discovery/tables/methods.csv",
+    "results/exp5a_gate0_and_surprise/tables/diag1d_exp4_structural_arbitration.csv",
+    "results/exp4b_compact_multibarrier/tables/r3_distractor_methods.csv",
+    "results/exp4b_compact_multibarrier/tables/stage_lock_methods.csv",
 ]
 
 

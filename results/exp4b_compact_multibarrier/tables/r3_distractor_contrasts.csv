@@ -1,0 +1,5 @@
+track,contrast,n_seeds,n_episodes_per_seed,diff_mean,diff_median,seed_diff_sd,ci_low,ci_high,win_rate,tie_rate,loss_rate,practical_threshold,verdict,seeds_positive,seeds_negative
+r3_distractor,drqn_aux_discovery_minus_drqn_vanilla,5,512,7.499999999999998,10.399999999999999,2.591150806109129,5.510587890625,9.567124999999999,0.75,0.05,0.2,0.3,SUPPORTED_POS,5,0
+r3_distractor,drqn_aux_discovery_minus_drqn_aux_uniform,5,512,-0.4350000000000005,0.14999999999999858,3.4287661775046723,-3.055322265625,2.2586845703124996,0.5,0.05,0.45,0.3,INCONCLUSIVE,3,2
+r3_distractor,drqn_aux_discovery_minus_drqn_aux_yr,5,512,2.945,1.3999999999999986,6.681349975865655,-2.2711357421874996,8.11411328125,0.6,0.05,0.35,0.3,INCONCLUSIVE,3,2
+r3_distractor,drqn_aux_yr_minus_drqn_vanilla,5,512,4.555000000000001,5.850000000000001,4.441684646617767,0.9265175781249999,7.775742187499997,0.6,0.05,0.35,0.3,SUPPORTED_POS,4,1

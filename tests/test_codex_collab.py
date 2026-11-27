@@ -113,12 +113,12 @@ class TestCodexCollaborationEnv(unittest.TestCase):
             self.assertIn("context_pack_slim.md", prompt)
             self.assertIn("TASK-998", prompt)
 
-            agy_cmd = handoff.build_agy_command("/usr/bin/agy", info, prompt, model="claude-sonnet-4-6")
+            agy_cmd = handoff.build_agy_command("/usr/bin/agy", info, prompt)
             self.assertEqual(agy_cmd[0], "/usr/bin/agy")
             self.assertIn("--sandbox", agy_cmd)
             self.assertIn("--disable-slash-commands", agy_cmd)
-            self.assertIn("plan", agy_cmd)
-            self.assertIn("claude-sonnet-4-6", agy_cmd)
+            self.assertIn("json", agy_cmd)
+            self.assertIn("claude-opus-5-5-high", agy_cmd)
             self.assertEqual(agy_cmd[-2], "-p")
 
 

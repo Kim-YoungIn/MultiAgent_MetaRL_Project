@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 from fnmatch import fnmatch
+import json
 import os
 from pathlib import Path
 import re
@@ -35,11 +36,13 @@ REQUIRED_AGENT_KEYS = ("name", "description", "model", "model_reasoning_effort",
 CLAUDE_ROLES = {
     "claude_architect": {
         "description": "Antigravity-Claude experimental design co-architect & scoped prototyper",
+        "default_model": "claude-sonnet-5-5-high",
         "effort": "high",
         "mode": "accept-edits",
     },
     "claude_analyst": {
         "description": "Antigravity-Claude cross-study synthesis & mechanism analyst (read-only)",
+        "default_model": "claude-opus-5-5-high",
         "effort": "high",
         "mode": "plan",
     },
@@ -282,13 +285,23 @@ def build_agy_command(
     is_report_only = bool(task_info["allowed_paths"]) and all(
         p.startswith(("handoff/reviews/", "handoff/reports/")) for p in task_info["allowed_paths"]
     )
-    eff = effort or str(role_meta.get("effort", "high"))
-    mode = "plan" if is_report_only else str(role_meta.get("mode", "accept-edits"))
-    chosen_model = model or os.environ.get("AGY_CLAUDE_MODEL", "").strip()
+    chosen_model = (
+        model
+        or os.environ.get("AGY_CLAUDE_MODEL", "").strip()
+        or str(role_meta.get("default_model", ""))
+    )
+    output_fmt = "json" if is_report_only else "text"
 
-    cmd = [bin_path, "--sandbox", "--mode", mode, "--effort", eff, "--disable-slash-commands", "--output-format", "text"]
+    cmd = [bin_path, "--sandbox", "--disable-slash-commands", "--output-format", output_fmt]
+    if not is_report_only:
+        mode = str(role_meta.get("mode", "accept-edits"))
+        cmd.extend(["--mode", mode])
     if chosen_model:
         cmd.extend(["--model", chosen_model])
+    has_effort_suffix = any(chosen_model.endswith(f"-{lvl}") for lvl in ("low", "medium", "high", "xhigh", "max"))
+    eff = effort or ("" if has_effort_suffix else str(role_meta.get("effort", "")))
+    if eff:
+        cmd.extend(["--effort", eff])
     cmd.extend(["-p", prompt])
     return cmd
 
@@ -305,7 +318,7 @@ def build_codex_prompt(task_info: dict, root: Path = ROOT, output_via_flag: bool
     allowed_str = ", ".join(task_info["allowed_paths"]) or "(none - read-only)"
     if is_claude_role(task_info["role"]):
         deliver_line = (
-            f"5. Return the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
+            f"5. Do NOT call write_file or edit_file; return ONLY the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
             if output_via_flag and task_info["allowed_paths"]
             else f"5. Deliver your verified report directly to the assigned path in `{rel_brief}`."
         )
@@ -465,10 +478,38 @@ def main() -> int:
                     if res.stdout:
                         print(res.stdout, file=sys.stderr)
                     return res.returncode
+                raw_out = res.stdout.strip()
+                report_text = ""
+                usage_summary = ""
+                try:
+                    payload = json.loads(raw_out)
+                    status = payload.get("status", "")
+                    report_text = str(payload.get("response", "")).strip()
+                    usage = payload.get("usage", {}) or {}
+                    dur = payload.get("duration_seconds")
+                    usage_summary = (
+                        f" | status={status} turns={payload.get('num_turns')} "
+                        f"dur={dur:.1f}s in={usage.get('input_tokens')} "
+                        f"out={usage.get('output_tokens')} cache={usage.get('cache_read_tokens')}"
+                        if isinstance(dur, (int, float))
+                        else f" | status={status}"
+                    )
+                    if status and status != "SUCCESS":
+                        print(f"[ERROR] agy returned status={status}: {raw_out[:500]}", file=sys.stderr)
+                        if res.stderr:
+                            print(res.stderr, file=sys.stderr)
+                        return 1
+                except json.JSONDecodeError:
+                    report_text = raw_out
+                if not report_text:
+                    print("[ERROR] agy returned an empty response; refusing to write empty report.", file=sys.stderr)
+                    if res.stderr:
+                        print(res.stderr, file=sys.stderr)
+                    return 1
                 out_file = ROOT / info["allowed_paths"][0]
                 out_file.parent.mkdir(parents=True, exist_ok=True)
-                out_file.write_text(res.stdout.strip() + "\n", encoding="utf-8")
-                print(f"[OK] Wrote {out_file.relative_to(ROOT)} ({len(res.stdout.encode('utf-8'))} bytes)")
+                out_file.write_text(report_text + "\n", encoding="utf-8")
+                print(f"[OK] Wrote {out_file.relative_to(ROOT)} ({len(report_text.encode('utf-8'))} bytes{usage_summary})")
                 return 0
             return subprocess.call(cmd, cwd=ROOT, env=env)
 

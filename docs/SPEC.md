@@ -139,3 +139,31 @@ Implemented in `src/mamrl/eval/exact_dp.py` using exact rational arithmetic (`fr
    - **Layer 1:** `restored_commitment_value` $C(b)$, `restored_adaptive_value` $V^*(b)$, `restored_opportunity_gap`, `prefix_reward`, net cost-inclusive restored returns, posterior entropy & rule ID rate.
    - **Layer 3 (Non-OOD):** `live_continuation_gap` $= V^*(q_K, b(\tau_{1:K})) - R_{K+1:T}^{\text{actual}}$ + disjoint-split `hidden_state_linear_probe_acc` (diagnostic only).
    - **Hierarchical Paired Bootstrap (10,000 resamples, training seed as independent unit)** with pre-declared thresholds ($\delta_{\text{info}} = 0.25$, $\delta_{\text{total}} = 0.30$) classifying every primary contrast into `SUPPORTED_POS`, `SUPPORTED_NEG`, `RESOLVED_NULL`, or `INCONCLUSIVE`.
+
+
+---
+
+## 8. Post-Interim Extensions, Environment Design Principles & Active Roadmap (v3.2)
+
+### Completed Diagnostics & Redesign Baseline
+- **Exp 5A (`results/exp5a_gate0_and_surprise/`):** PBVI corrupted-channel Gate-0 (`d=0.6` achievable `12.00`, `VoI >= +7.20`); eval-only `pred_y` surprise switch (falsified escalation); Exp 2B/3B exact Gate-0 VoI (`100%` positive VoI on `coop_trap` & Exp 3B suites, `0` on `comp_rps`); 22-action Exp 4 `structural_model_mb` arbitration (`5/5` seeds unlock Tier 3, mean `84.84`, median `120.55`).
+- **Exp 4B (`results/exp4b_compact_multibarrier/`):** `R3+Distractor` gate-validity check + compact 6-action 3-layer Stage-Lock (`src/mamrl/envs/stage_lock.py`, `T=48`, `|A|=6`, Gate-0 `9.6→30.9→60.1→90.1`). Recurrent Bellman target history bug fixed in `study_exp4b_compact.py` (`compute_recurrent_double_dqn_targets`), pending clean re-seal.
+
+### Environment Design Principle (Adopted 2026-11-28)
+- **No 1-to-1 Action-per-Attribute Enumeration:** Do not design future benchmarks by listing a separate dedicated action button for each hidden opponent attribute (e.g., `X00..X11`, `T3_000..T3_111`).
+- **Mathematically Constructed Game Families + Pre-Built Exact Oracles:** Define reusable game-theoretic repeated-game families over compact shared action spaces, paired with exact mathematical Oracles / Bayes-Optimal DP verified *before* training.
+- **Horizon & Scale Target:** Scale episode length (`T=48~64`) and multi-stage strategic depth without flat action-space explosion.
+
+### Active Exploration Roadmap (7 Major Items — Pre-Freeze)
+1. **`U1` Multi-Family × Auxiliary Task Discovery:** Combine Exp 3B's multi-family equivariant setup with auxiliary discovery (global gate vs context-conditioned dynamic gate $w(h_t)$) to test whether mixed families enable per-family tool discovery or cause interference.
+2. **`U2` Multi-Barrier × Online Learning Opponents:** Combine multi-stage exploration barriers with non-stationary learning opponents where structure-informed fixed models break down.
+3. **`U3` Auxiliary Discovery Mechanism Deepening:** Compare true bilevel meta-gradient vs local cosine alignment and richer public auxiliary candidates (multi-step predictions, reward deltas, counterpart rewards).
+4. **`U4` Noise-Matched Training for OOD Calibration:** Train on $d \in \{0, 0.3\}$ and test held-out $d=0.6$ to separate support coverage from structural OOD overconfidence.
+5. **`P1` Exp 3B Representation & Feedback Controls:** State-matched (`GRU-128`) × permutation-augmented `One-Hot` + `Equivariant` masked/prior controls (+ optional `D-031` `n2_b2`).
+6. **`P2` Exp 4B Bug-Fixed Re-Seal & Probe Attribution:** Re-run fixed `study_exp4b_compact.py` (with Exp-1-matched `R3+distractor` hyperparams) + eval-only `P`-before-exploit probe attribution.
+7. **`P3` Exp 1 `rl2_ppo` Budget Match (`691k`) & `Expected SARSA` Reconciliation:** Match `rl2_ppo` transition budget on `R3` and align Diag 1B vs Exp 2A SARSA configs.
+
+### Adopted STOP Decisions
+- **STOP** GRU-surprise retraining (Diag 1B failed escalation criterion vs `prior_only` and degraded $d=0.3$).
+- **STOP** further 22-action Exp 4 interventions (Diag 1D + Exp 4B already isolated data sufficiency vs credit assignment).
+- **STOP** further `comp_rps` expansion (frozen as exact `VoI=0` zero-sum negative control).

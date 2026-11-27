@@ -27,7 +27,12 @@ class TestCodexCollaborationEnv(unittest.TestCase):
 
         agents_dir = ROOT / ".codex" / "agents"
         roles = {p.stem for p in agents_dir.glob("*.toml")}
-        self.assertTrue({"research_critic", "validator", "experiment_worker", "paper_reviewer"}.issubset(roles))
+        self.assertTrue({"research_critic", "results_analyst", "validator", "experiment_worker"}.issubset(roles))
+        self.assertNotIn("paper_reviewer", roles)
+
+        t3 = handoff.parse_task_brief(handoff.find_task_file("TASK-003", ROOT))
+        self.assertEqual(t3["role"], "results_analyst")
+        self.assertEqual(t3["allowed_paths"], ["handoff/reports/TASK-003_legacy_bridge_and_insights.md"])
 
     def test_starter_task_briefs_parse_and_scope_checker_enforces_boundaries(self) -> None:
         handoff = _load_script("codex_handoff", "scripts/codex_handoff.py")

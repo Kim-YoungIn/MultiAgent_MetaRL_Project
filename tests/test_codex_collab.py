@@ -83,9 +83,17 @@ class TestCodexCollaborationEnv(unittest.TestCase):
 
     def test_claude_collaborator_entry_and_prompts(self) -> None:
         handoff = _load_script("codex_handoff", "scripts/codex_handoff.py")
+        packer = _load_script("pack_context", "scripts/pack_context.py")
         self.assertTrue((ROOT / "CLAUDE.md").exists())
         self.assertTrue((ROOT / "GEMINI.md").exists())
         self.assertIn("AGENTS.md", (ROOT / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertEqual(set(handoff.CLAUDE_ROLES.keys()), {"claude_architect", "claude_analyst"})
+        self.assertNotIn("claude_writer", handoff.CLAUDE_ROLES)
+
+        slim = packer.build_pack(slim=True)
+        self.assertIn("PROGRESS.md", slim)
+        self.assertIn("INTERIM_SYNTHESIS_EXP1_TO_4.md", slim)
+        self.assertLess(len(slim.encode("utf-8")), 25000)
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_root = Path(tmp)
@@ -99,10 +107,19 @@ class TestCodexCollaborationEnv(unittest.TestCase):
             )
             info = handoff.parse_task_brief(brief)
             self.assertEqual(info["role"], "claude_analyst")
-            prompt = handoff.build_codex_prompt(info, tmp_root)
+            prompt = handoff.build_codex_prompt(info, tmp_root, output_via_flag=True)
             self.assertIn("Antigravity-Claude", prompt)
             self.assertIn("CLAUDE.md", prompt)
+            self.assertIn("context_pack_slim.md", prompt)
             self.assertIn("TASK-998", prompt)
+
+            agy_cmd = handoff.build_agy_command("/usr/bin/agy", info, prompt, model="claude-sonnet-4-6")
+            self.assertEqual(agy_cmd[0], "/usr/bin/agy")
+            self.assertIn("--sandbox", agy_cmd)
+            self.assertIn("--disable-slash-commands", agy_cmd)
+            self.assertIn("plan", agy_cmd)
+            self.assertIn("claude-sonnet-4-6", agy_cmd)
+            self.assertEqual(agy_cmd[-2], "-p")
 
 
 if __name__ == "__main__":

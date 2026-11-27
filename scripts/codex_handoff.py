@@ -33,9 +33,16 @@ REVIEWS_DIR = ROOT / "handoff" / "reviews"
 
 REQUIRED_AGENT_KEYS = ("name", "description", "model", "model_reasoning_effort", "developer_instructions")
 CLAUDE_ROLES = {
-    "claude_architect": "Antigravity-Claude experimental design co-architect & scoped prototyper",
-    "claude_analyst": "Antigravity-Claude cross-study synthesis & mechanism analyst",
-    "claude_writer": "Antigravity-Claude NeurIPS report / slide / script drafter",
+    "claude_architect": {
+        "description": "Antigravity-Claude experimental design co-architect & scoped prototyper",
+        "effort": "high",
+        "mode": "accept-edits",
+    },
+    "claude_analyst": {
+        "description": "Antigravity-Claude cross-study synthesis & mechanism analyst (read-only)",
+        "effort": "high",
+        "mode": "plan",
+    },
 }
 
 
@@ -227,6 +234,65 @@ def detect_openai_codex_binary() -> tuple[str | None, str, dict[str, str]]:
     return None, "OpenAI Codex CLI (@openai/codex) not found on PATH or ~/.nvm.", os.environ.copy()
 
 
+def detect_antigravity_cli() -> tuple[str | None, str, dict[str, str]]:
+    """Locate the Antigravity CLI (`agy`) binary on PATH or standard install locations."""
+    candidates: list[str] = []
+    found = shutil.which("agy")
+    if found:
+        candidates.append(found)
+    home = Path.home()
+    for extra in (
+        home / ".local" / "bin" / "agy",
+        home / ".antigravity" / "bin" / "agy",
+        Path("/usr/local/bin/agy"),
+    ):
+        if extra.exists():
+            candidates.append(str(extra))
+
+    seen: set[str] = set()
+    for cand in candidates:
+        if cand in seen:
+            continue
+        seen.add(cand)
+        p = Path(cand)
+        if not p.exists():
+            continue
+        env = os.environ.copy()
+        env["PATH"] = f"{p.parent}:{env.get('PATH', '')}"
+        try:
+            res = subprocess.run([cand, "--version"], capture_output=True, text=True, timeout=5, env=env)
+            out = (res.stdout + "\n" + res.stderr).strip()
+            if res.returncode == 0 and out:
+                return cand, f"agy {out}", env
+        except Exception:
+            continue
+    return None, "Antigravity CLI (`agy`) not found on PATH or ~/.local/bin/agy.", os.environ.copy()
+
+
+def build_agy_command(
+    bin_path: str,
+    task_info: dict,
+    prompt: str,
+    *,
+    model: str = "",
+    effort: str = "",
+) -> list[str]:
+    """Construct a token-optimized headless `agy` CLI command for an Antigravity-Claude task."""
+    role_meta = CLAUDE_ROLES.get(task_info["role"], {})
+    is_report_only = bool(task_info["allowed_paths"]) and all(
+        p.startswith(("handoff/reviews/", "handoff/reports/")) for p in task_info["allowed_paths"]
+    )
+    eff = effort or str(role_meta.get("effort", "high"))
+    mode = "plan" if is_report_only else str(role_meta.get("mode", "accept-edits"))
+    chosen_model = model or os.environ.get("AGY_CLAUDE_MODEL", "").strip()
+
+    cmd = [bin_path, "--sandbox", "--mode", mode, "--effort", eff, "--disable-slash-commands", "--output-format", "text"]
+    if chosen_model:
+        cmd.extend(["--model", chosen_model])
+    cmd.extend(["-p", prompt])
+    return cmd
+
+
 def load_role_config(role: str, root: Path = ROOT) -> dict:
     p = root / ".codex" / "agents" / f"{role}.toml"
     if not p.exists():
@@ -238,14 +304,19 @@ def build_codex_prompt(task_info: dict, root: Path = ROOT, output_via_flag: bool
     rel_brief = task_info["path"].relative_to(root)
     allowed_str = ", ".join(task_info["allowed_paths"]) or "(none - read-only)"
     if is_claude_role(task_info["role"]):
+        deliver_line = (
+            f"5. Return the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
+            if output_via_flag and task_info["allowed_paths"]
+            else f"5. Deliver your verified report directly to the assigned path in `{rel_brief}`."
+        )
         return (
             f"You are collaborating on this repository as **Antigravity-Claude** (`{task_info['role']}`) alongside Lead Agent (`Antigravity-Gemini`).\n"
             f"1. Read `AGENTS.md`, `CLAUDE.md`, `handoff/BOARD.md`, and `{rel_brief}` first.\n"
             f"2. Execute `{task_info['task_id']}` strictly within Allowed Write Paths: [{allowed_str}].\n"
-            f"3. TOKEN EFFICIENCY: Read `handoff/context_pack.md` and compact CSV tables listed in `{rel_brief}`; skip `runs/` and full `summary.json` unless strictly needed; keep your report concise (<= 120 lines).\n"
+            f"3. TOKEN EFFICIENCY: Read `handoff/context_pack_slim.md` (~12 KB) and `handoff/reports/INTERIM_SYNTHESIS_EXP1_TO_4.md` first; inspect specific compact CSV tables only as needed; skip `runs/` and full `summary.json`; keep your report concise (<= 120 lines).\n"
             f"4. Do NOT modify Lead-owned governance files (`AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`) "
             f"or sealed `results/` directories, and do NOT run `git commit`.\n"
-            f"5. Deliver your verified report directly to the assigned path in `{rel_brief}`."
+            f"{deliver_line}"
         )
     deliver_line = (
         f"5. Return the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
@@ -311,9 +382,11 @@ def main() -> int:
     p_prompt = sub.add_parser("prompt", help="Print a ready-to-use Codex prompt for a task brief.")
     p_prompt.add_argument("--id", required=True, help="Task ID, e.g. TASK-001")
 
-    p_run = sub.add_parser("run", help="Execute a task brief directly via OpenAI Codex CLI (codex exec).")
-    p_run.add_argument("--id", required=True, help="Task ID, e.g. TASK-001")
-    p_run.add_argument("--dry-run", action="store_true", help="Print the exact codex exec command without running it.")
+    p_run = sub.add_parser("run", help="Execute a task brief directly via OpenAI Codex CLI or Antigravity CLI (`agy`).")
+    p_run.add_argument("--id", required=True, help="Task ID, e.g. TASK-004 or TASK-006")
+    p_run.add_argument("--model", default="", help="Optional model override (especially for `agy` Claude roles, or set AGY_CLAUDE_MODEL).")
+    p_run.add_argument("--effort", default="", help="Optional reasoning effort override (low|medium|high|xhigh|max).")
+    p_run.add_argument("--dry-run", action="store_true", help="Print the exact CLI command without running it.")
 
     p_scope = sub.add_parser("check-scope", help="Check current git working tree changes against a task's Allowed Write Paths.")
     p_scope.add_argument("--id", required=True, help="Task ID, e.g. TASK-001")
@@ -366,6 +439,39 @@ def main() -> int:
 
     if args.cmd == "run":
         info = parse_task_brief(find_task_file(args.id))
+        is_report_only = bool(info["allowed_paths"]) and all(
+            p.startswith(("handoff/reviews/", "handoff/reports/")) for p in info["allowed_paths"]
+        )
+
+        if is_claude_role(info["role"]):
+            bin_path, detail, env = detect_antigravity_cli()
+            if bin_path is None:
+                print(f"[BLOCKED] {detail}", file=sys.stderr)
+                print("Use Antigravity `/swarm` or paste the prompt below into an Antigravity-Claude session:", file=sys.stderr)
+                print(build_codex_prompt(info))
+                return 2
+            prompt = build_codex_prompt(info, output_via_flag=is_report_only)
+            cmd = build_agy_command(bin_path, info, prompt, model=args.model, effort=args.effort)
+            if args.dry_run:
+                print(f"[DRY-RUN] binary={bin_path} ({detail}) role={info['role']} report_only={is_report_only}")
+                print("Command:", " ".join(cmd[:-1]), "<prompt>")
+                return 0
+            print(f"[RUN] {bin_path} ({detail}) -> {info['task_id']} ({info['role']})", flush=True)
+            if is_report_only:
+                res = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
+                if res.returncode != 0:
+                    if res.stderr:
+                        print(res.stderr, file=sys.stderr)
+                    if res.stdout:
+                        print(res.stdout, file=sys.stderr)
+                    return res.returncode
+                out_file = ROOT / info["allowed_paths"][0]
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                out_file.write_text(res.stdout.strip() + "\n", encoding="utf-8")
+                print(f"[OK] Wrote {out_file.relative_to(ROOT)} ({len(res.stdout.encode('utf-8'))} bytes)")
+                return 0
+            return subprocess.call(cmd, cwd=ROOT, env=env)
+
         bin_path, detail, env = detect_openai_codex_binary()
         if bin_path is None:
             print(f"[BLOCKED] {detail}", file=sys.stderr)
@@ -375,17 +481,16 @@ def main() -> int:
             return 2
 
         role_cfg = load_role_config(info["role"])
-        is_report_only = bool(info["allowed_paths"]) and all(
-            p.startswith(("handoff/reviews/", "handoff/reports/")) for p in info["allowed_paths"]
-        )
         sandbox_mode = "read-only" if is_report_only else "workspace-write"
         prompt = build_codex_prompt(info, output_via_flag=is_report_only)
 
         cmd = [bin_path, "exec", "-C", str(ROOT), "-s", sandbox_mode, "--ephemeral"]
-        if role_cfg.get("model"):
-            cmd.extend(["-m", str(role_cfg["model"])])
-        if role_cfg.get("model_reasoning_effort"):
-            cmd.extend(["-c", f'model_reasoning_effort="{role_cfg["model_reasoning_effort"]}"'])
+        chosen_model = args.model or str(role_cfg.get("model", ""))
+        chosen_effort = args.effort or str(role_cfg.get("model_reasoning_effort", ""))
+        if chosen_model:
+            cmd.extend(["-m", chosen_model])
+        if chosen_effort:
+            cmd.extend(["-c", f'model_reasoning_effort="{chosen_effort}"'])
         if is_report_only:
             out_file = ROOT / info["allowed_paths"][0]
             out_file.parent.mkdir(parents=True, exist_ok=True)

@@ -13,3 +13,4 @@ checkpoints/
 build/
 dist/
 handoff/context_pack.md
+handoff/context_pack_slim.md

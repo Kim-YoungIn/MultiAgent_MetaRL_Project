@@ -15,6 +15,12 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
 
+SLIM_DOCS = [
+    "PROGRESS.md",
+    "handoff/BOARD.md",
+    "handoff/reports/INTERIM_SYNTHESIS_EXP1_TO_4.md",
+]
+
 KEY_DOCS = [
     "AGENTS.md",
     "PROGRESS.md",
@@ -59,7 +65,23 @@ def _repo_tree() -> str:
     return "\n".join(lines)
 
 
-def build_pack() -> str:
+def build_pack(slim: bool = False) -> str:
+    if slim:
+        sections = [
+            "# MAMRL Slim Context Pack (Token-Optimized Routine Dispatch)",
+            f"- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            f"- Repo state: {_git_info()}",
+            "- Full pack: `handoff/context_pack.md` · Compact CSVs: `results/*/tables/*.csv` (skip `runs/` & full `summary.json`).",
+            "",
+        ]
+        for rel in SLIM_DOCS:
+            p = ROOT / rel
+            if p.exists():
+                sections.append(f"---\n\n## File: `{rel}`\n")
+                sections.append(p.read_text(encoding="utf-8").strip())
+                sections.append("")
+        return "\n".join(sections)
+
     sections = [
         "# MAMRL Context Pack (Antigravity-Gemini Lead | Antigravity-Claude & Codex CLI Collaborators)",
         f"- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
@@ -108,12 +130,14 @@ def build_pack() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pack active project context into one markdown file.")
-    parser.add_argument("--output", default="handoff/context_pack.md", help="Output markdown path.")
+    parser.add_argument("--output", default="", help="Output markdown path (defaults to handoff/context_pack[_slim].md).")
+    parser.add_argument("--slim", action="store_true", help="Write a compact ~12 KB context pack for token-efficient dispatches.")
     args = parser.parse_args()
 
-    out = ROOT / args.output
+    out_rel = args.output or ("handoff/context_pack_slim.md" if args.slim else "handoff/context_pack.md")
+    out = ROOT / out_rel
     out.parent.mkdir(parents=True, exist_ok=True)
-    content = build_pack()
+    content = build_pack(slim=args.slim)
     out.write_text(content, encoding="utf-8")
     print(f"Wrote {out} ({len(content.encode('utf-8')) / 1024:.1f} KB)")
 

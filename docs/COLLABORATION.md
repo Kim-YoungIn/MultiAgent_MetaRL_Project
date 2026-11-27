@@ -1,75 +1,62 @@
 # Multi-Agent Collaboration Guide (Antigravity-Gemini ↔ Antigravity-Claude ↔ Codex CLI)
 
-This repository uses a **Lead-Orchestrated Handoff Architecture** so **Antigravity-Gemini (default Lead)**, **Antigravity-Claude (Co-Lead / Collaborator)**, and **Codex CLI (`@openai/codex`)** collaborate cleanly without file conflicts, spec drift, directory sprawl, or unnecessary token burn.
+This repository uses a **Token-Tiered, Lead-Orchestrated Handoff Architecture** so **Antigravity-Gemini (default Lead)**, **Antigravity-Claude (Co-Design & Analysis)**, and **Codex CLI (`@openai/codex`)** collaborate automatically without file conflicts, spec drift, directory sprawl, or unnecessary token burn. *(Paper/slide writing roles remain deferred until experiments finalize.)*
 
 Entry files (all point to `AGENTS.md` as the single source of truth):
 - `AGENTS.md` — Shared project rules & scientific integrity contract.
 - `GEMINI.md` — Entry file for Antigravity-Gemini sessions.
-- `CLAUDE.md` — Entry file for Antigravity-Claude (and Claude Code) sessions.
+- `CLAUDE.md` — Entry file for Antigravity-Claude / `agy` CLI sessions.
 - `.codex/config.toml` + `.codex/agents/*.toml` — OpenAI Codex CLI role configs.
 
 ---
 
-## 1. Authority & Write-Ownership Matrix (Token-Tiered)
+## 1. 3-Tier Authority & Token-Optimization Matrix
 
-| Agent / Role | Platform / Model | Primary Purpose | Allowed Write Scope | Never Modifies |
+| Tier & Agent / Role | Platform / Compute | Primary Purpose | Allowed Write Scope | Never Modifies |
 |---|---|---|---|---|
-| **Antigravity-Gemini (Lead)** | Antigravity (`GEMINI.md`) | Architecture, core experiments, audit adoption, git commits/pushes | `AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`, `handoff/tasks/`, `src/`, `configs/`, `tests/`, `results/` | — |
-| **Antigravity-Claude `claude_architect`** | Antigravity Claude (`CLAUDE.md`) | Experimental design co-architecture, algorithm prototyping, deep code review | Explicit `Allowed Write Paths` + `handoff/reports/TASK-*.md` | Governance docs & sealed `results/` (unless promoted to Lead) |
-| **Antigravity-Claude `claude_analyst`** | Antigravity Claude (`CLAUDE.md`) | Cross-study synthesis, mechanism interpretation, hypothesis/falsification critique | Assigned `handoff/reports/TASK-*.md` or `handoff/reviews/*.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
-| **Antigravity-Claude `claude_writer`** | Antigravity Claude (`CLAUDE.md`) | NeurIPS 5-page report, presentation script, slides & quiz drafting (when ready) | Assigned draft paths + `handoff/reports/TASK-*.md` | `src/`, `configs/`, `tests/`, sealed `results/`, governance docs |
-| **Codex `research_critic`** | Codex CLI (`gpt-6.1-sol`, `high`) | **Validity Defense:** audit statistical verdicts, confounds, overclaiming, OOD bounds | Assigned `handoff/reviews/YYYYMMDD_<topic>.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
-| **Codex `results_analyst`** | Codex CLI (`gpt-6.1-sol`, `high`) | **Discovery & Interpretation:** mine CSVs for mechanisms, anomalies, legacy-to-v3 links | Assigned `handoff/reports/TASK-*.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
-| **Codex `validator`** | Codex CLI (`gpt-6.1-terra`, `medium`) | **Contract Verification:** non-leakage, exact DP, disjoint splits, CSV/JSON match, `<5 MB` zip | Assigned `tests/` + `handoff/reports/TASK-*.md` | `src/`, `configs/`, `results/`, governance docs |
-| **Codex `experiment_worker`** | Codex CLI (`gpt-6.1-terra`, `medium`) | **Scoped Implementation:** implement Lead-assigned extensions/controls inside allowed paths | Explicit `Allowed Write Paths` + `handoff/reports/TASK-*.md` | Governance docs, sealed `results/` |
+| **Lead: Antigravity-Gemini** | Antigravity (`GEMINI.md`) | Core execution, orchestration, audit adoption, git commits/pushes | `AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`, `handoff/tasks/`, `src/`, `configs/`, `tests/`, `results/` | — |
+| **Tier 1 (Low-Cost): Codex `validator`** | Codex CLI (`gpt-6.1-terra`, `medium`, `--ephemeral`) | **Contract Verification:** non-leakage, masking, exact DP, CSV/JSON match, `<5 MB` zip | Assigned `tests/` + `handoff/reports/TASK-*.md` | `src/`, `configs/`, `results/`, governance docs |
+| **Tier 1 (Low-Cost): Codex `experiment_worker`** | Codex CLI (`gpt-6.1-terra`, `medium`) | **Scoped Implementation:** implement Lead-assigned extensions/controls inside allowed paths | Explicit `Allowed Write Paths` + `handoff/reports/TASK-*.md` | Governance docs, sealed `results/` |
+| **Tier 2 (Adversarial): Codex `research_critic`** | Codex CLI (`gpt-6.1-sol`, `high`, `read-only --ephemeral`) | **Validity Defense:** audit statistical verdicts, confounds, overclaiming, OOD bounds | Assigned `handoff/reviews/YYYYMMDD_<topic>.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
+| **Tier 2 (Adversarial): Codex `results_analyst`** | Codex CLI (`gpt-6.1-sol`, `high`, `read-only --ephemeral`) | **Discovery & Interpretation:** mine CSVs for mechanisms, anomalies, legacy-to-v3 links | Assigned `handoff/reports/TASK-*.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
+| **Tier 3 (Co-Design): Antigravity-Claude `claude_analyst`** | Antigravity `/swarm` or `agy` CLI (`--mode plan --sandbox --effort high`) | **Synthesis & Co-Design:** cross-study mechanism synthesis, hypothesis critique, next-experiment design | Assigned `handoff/reports/TASK-*.md` or `handoff/reviews/*.md` ONLY | `src/`, `configs/`, `tests/`, `results/`, governance docs |
+| **Tier 3 (Co-Design): Antigravity-Claude `claude_architect`** | Antigravity `/swarm` (`workspace:"share"`) or `agy` CLI (`--mode accept-edits`) | **Architecture & Prototyping:** scoped method/environment prototyping & deep code review | Explicit `Allowed Write Paths` + `handoff/reports/TASK-*.md` | Governance docs & sealed `results/` (unless promoted to Lead) |
 
 ---
 
-## 2. Token-Efficiency Rules
-1. **Targeted CSVs over raw dumps:** Collaborators read compact `results/*/tables/*.csv` (`2–15 KB`) and `handoff/context_pack.md` instead of full `summary.json` or gitignored `runs/`.
-2. **Tiered compute:** Use `Codex validator / experiment_worker` (`gpt-6.1-terra`, `medium`) for mechanical checks/coding, `Codex research_critic / results_analyst` (`gpt-6.1-sol`, `high`) for independent adversarial audits, and **Antigravity-Claude** for nuanced synthesis, experimental co-design, and clear scientific writing.
-3. **Strict report caps:** Collaborators write concise structured outputs (`<= 80–120` lines) to `handoff/reports/` or `handoff/reviews/`, so the Lead integrates insights in one small read.
+## 2. Token-Optimization Rules (Mandatory)
+1. **Slim context first (`~5×` smaller):** Generate `handoff/context_pack_slim.md` (`~12 KB`) via `.venv/bin/python scripts/pack_context.py --slim` for routine dispatches (contains `PROGRESS.md`, `handoff/BOARD.md`, and `INTERIM_SYNTHESIS_EXP1_TO_4.md`). Use full `handoff/context_pack.md` (`~76 KB`) only when deep `SPEC.md` / `PRIOR_FINDINGS.md` lookup is required.
+2. **Ephemeral fresh-context dispatch:** Always dispatch one-shot audits/reviews in fresh sessions (`codex exec --ephemeral`, `agy -p --disable-slash-commands`, or Antigravity `/swarm` workers) so multi-turn chat history is never re-sent.
+3. **Compact CSVs & hard report cap:** Collaborators read `results/*/tables/*.csv` (`2–15 KB`), skip `runs/` and full `summary.json`, and keep reports `<= 120` lines.
+4. **Main-session hygiene:** Use `/compact` in the Lead conversation after major milestones, or start a clean session from `PROGRESS.md` + `INTERIM_SYNTHESIS_EXP1_TO_4.md`.
 
 ---
 
-## 3. Standard Lead ↔ Codex CLI Workflow
+## 3. Automated Dispatch (Codex CLI + Antigravity CLI `agy`)
 
-1. **Dispatch:**
-   ```bash
-   .venv/bin/python scripts/codex_handoff.py status
-   .venv/bin/python scripts/codex_handoff.py run --id TASK-004      # runs OpenAI Codex CLI directly
-   .venv/bin/python scripts/codex_handoff.py prompt --id TASK-004   # prints copy-paste prompt
-   ```
-   *(For concurrent coding tasks alongside Lead edits, isolate via `git worktree add ../mamrl-codex-TASK-XXX -b codex/TASK-XXX`.)*
+`scripts/codex_handoff.py` dispatches both **Codex CLI** and **Antigravity-Claude (`agy`)** tasks from the same board:
 
-2. **Verify Scope & Tests:**
-   ```bash
-   .venv/bin/python scripts/codex_handoff.py check-scope --id TASK-004
-   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-   ```
+```bash
+# 1. Refresh slim context pack (~12 KB) and inspect board
+.venv/bin/python scripts/pack_context.py --slim
+.venv/bin/python scripts/codex_handoff.py status
 
-3. **Adopt:** Lead reviews `handoff/reviews/` or `handoff/reports/`, integrates approved findings/code, updates `PROGRESS.md` & `handoff/BOARD.md`, and commits.
+# 2. Automated Codex CLI dispatch (read-only tasks auto-save via -o)
+.venv/bin/python scripts/codex_handoff.py run --id TASK-004
 
----
+# 3. Automated Antigravity-Claude dispatch via agy CLI (after 1-time `agy` sign-in)
+#    Check available Claude model IDs via: ~/.local/bin/agy models
+.venv/bin/python scripts/codex_handoff.py run --id TASK-006 --model <claude-model-id>
+.venv/bin/python scripts/codex_handoff.py run --id TASK-006 --model <claude-model-id> --dry-run
 
-## 4. Antigravity-Claude Collaboration Workflow
+# 4. Alternative: Native Antigravity /swarm (zero extra CLI sign-in, isolated workers, zero idle tokens)
+#    Invoke /swarm in Antigravity chat and pin a Claude worker to TASK-006.
 
-Antigravity-Claude can participate in two clean modes:
+# 5. Verify scope & unit tests before Lead adoption
+.venv/bin/python scripts/codex_handoff.py check-scope --id TASK-006
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+```
 
-### Mode A — Parallel Collaborator (Second Antigravity Chat/Tab Running Claude)
-1. Refresh the shared context pack: `.venv/bin/python scripts/pack_context.py`
-2. Create or pick a scoped Claude task brief (`role` in `{claude_architect, claude_analyst, claude_writer}`):
-   ```bash
-   .venv/bin/python scripts/codex_handoff.py new-task --id TASK-006 --role claude_analyst \
-       --title "Interim synthesis and Exp 4 follow-up design" \
-       --allow "handoff/reports/TASK-006_claude_interim_design_review.md"
-   .venv/bin/python scripts/codex_handoff.py prompt --id TASK-006
-   ```
-3. Paste the generated prompt into the **Antigravity-Claude** conversation. Claude writes ONLY to its `Allowed Write Paths` (or an isolated `git worktree add ../mamrl-claude-TASK-XXX -b claude/TASK-XXX` if editing code).
-4. Lead verifies via `check-scope --id TASK-006`, reviews the report, and adopts approved changes.
-
-### Mode B — In-Place Lead Model Handoff (Switching Gemini ↔ Claude in Antigravity)
-1. Before switching models, run `.venv/bin/python scripts/pack_context.py`, ensure `PROGRESS.md` and `handoff/BOARD.md` reflect the latest state, and leave a clean `git status`.
-2. In the new Claude session, Antigravity automatically loads `AGENTS.md` and `CLAUDE.md`; start with *"Read `PROGRESS.md` and `handoff/BOARD.md` and continue from the current checkpoint."*
-
-> **Installation Note for OpenAI Codex CLI:** OpenAI's Codex CLI is the Node package `@openai/codex` (`npm install -g @openai/codex`), **not** the unrelated PyPI `codex` comic-book server (`pip install codex`). `scripts/codex_handoff.py run` automatically guards against the PyPI binary.
+> **One-Time CLI Notes:**
+> - **Antigravity CLI (`agy`):** Detected automatically at `~/.local/bin/agy`. Run `~/.local/bin/agy` once interactively in your terminal to sign in, then check model IDs with `~/.local/bin/agy models` (you can also set `AGY_CLAUDE_MODEL=<model-id>`).
+> - **OpenAI Codex CLI (`@openai/codex`):** Detected automatically from `PATH` or `~/.nvm/versions/node/*/bin/codex`, with an automatic guard against the unrelated PyPI `codex` package.

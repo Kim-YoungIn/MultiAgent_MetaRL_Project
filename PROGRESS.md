@@ -3,18 +3,17 @@
 ## Objective & Stage
 - **Goal:** Unbiased empirical inquiry into how meta-learning affects exploration and fast adaptation in multi-agent repeated games.
 - **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
-- **Stage:** **Exp 1 (`results/core_v3_sealed/`, 210/210 fits) & Exp 2A (`results/exp2a_online_opp/`, 90/90 units) COMPLETE & VERIFIED (24/24 unit tests pass).** Next: Exp 2B (Symmetric 4-Action Competition & Cooperation Matchups).
+- **Stage:** **Exp 1 (`core_v3_sealed`), Exp 2A (`exp2a_online_opp`), and Exp 2B (`exp2b_symmetric_ma`) ALL COMPLETE & VERIFIED (27/27 unit tests pass, repo ~3.1 MB < 5 MB).** Ready for Priority Extension (**Auxiliary Task Discovery / 보조 목표 탐색**) and publication figures/report.
 
-## Verified Exp 1 Results (`R0/R1/R3`, Fixed Reactive Opponent, 5 sealed seeds `1001..1005`)
-- **`drqn_aux_yr`:** `+20.200 ± 0.00` / `+19.100 ± 0.00` / `+17.520 ± 0.12` (99.7% Bayes-Opt; `L1_K4 commit=+17.000`, `L3_gap=0.000`). Beats masked (`+1.570`, `SUPPORTED_POS`), `drqn_vanilla` (`+4.590`, `SUPPORTED_POS`), `drqn_aux_r` (`+5.305`), `rl2_ppo` (`+4.800`), and online UCB/Greedy/Random; ties `structural_model` (`+17.500`, `RESOLVED_NULL`).
-- **Aux Signal Finding:** `aux_y` (opponent-action prediction) unlocks 100% exploration info (`+16.795`); `aux_r` alone does not (`+12.215`).
-
-## Verified Exp 2A Results (`R3` × Online `Q-learning` / Unseen `Expected SARSA`, 5 sealed seeds, Continuous vs. Restored)
-- **Zero-Shot Brittleness:** Fixed-trained `zs_drqn_aux_yr` collapsed under online opponents (`+4.407` on Q-learning, `-7.018` on unseen Expected SARSA; `zs_bayes_optimal = +4.443 / -9.644`), losing to smoothed `zs_structural_model` (`+8.737 / +1.739`, `SUPPORTED_NEG`).
-- **Matched Online Meta-Training (`mt_drqn_aux_yr`):** Rescued performance on `q_learning_indist` (`+9.837 ± 0.83`, `+5.430` over zero-shot, `SUPPORTED_POS`) by learning risk-aware fallback to `S` (`18.4%` vs `4.8%`, cutting `X_mismatch` 6.5×). Beat `masked` (`+1.497`, `SUPPORTED_POS`), `prior_only` (`+5.037`), `vanilla` (`+2.818`), and online UCB/Greedy/Random, with mutualistic opponent return (`50.32` vs `43.21`, `both_up=75.8%`).
-- **Restored vs. Continuous (`K=4`):** `mt_drqn_aux_yr` retained value after reset (`+9.837 → +9.345`, `-0.492` `INCONCLUSIVE`) whereas `mt_structural_model` dropped significantly (`+8.895 → +7.486`, `-1.409` `SUPPORTED_POS`), yielding `mt_drqn_aux_yr > mt_structural_model` on Restored (`+1.859`, `SUPPORTED_POS`; DiD `-0.917`, `SUPPORTED_NEG`).
-- **Honest OOD Noise Boundary (`expected_sarsa_unseen`, early honesty 59%):** Matched training prevented collapse (`-7.018 → +3.294`, beating UCB/Greedy and Restored `mt_structural_model`), **but ALL active probers lost to blind safe play `prior_only` (`+4.800`; `-1.506`, `SUPPORTED_NEG`)** when unseen early opponent noise exceeded the meta-trained risk threshold.
+## Verified Results Summary (All 5 Sealed Seeds `1001..1005`, `n_eval=512`, `10k` Hierarchical Bootstrap)
+- **Exp 1 (`R0/R1/R3`, Fixed Opponent):** `drqn_aux_yr` reached `+20.20 / +19.10 / +17.52` (99.7% Bayes-Opt; `L1_K4 commit=+17.00`), beating `masked` (`+1.57`, `SUPPORTED_POS`), `vanilla` (`+4.59`), `aux_r` (`+5.31`), `rl2_ppo` (`+4.80`), and online baselines, while tying `structural_model` (`+17.50`, `RESOLVED_NULL`). `aux_y` is the critical signal (`+16.80` vs `aux_r +12.22`).
+- **Exp 2A (`R3` × Online `Q-learning` / Unseen `Expected SARSA`, Continuous vs. Restored):**
+  - Zero-shot fixed-trained `zs_drqn_aux_yr` collapsed (`+4.41 / -7.02`), losing to smoothed `zs_structural_model` (`+8.74 / +1.74`, `SUPPORTED_NEG`).
+  - Matched online training `mt_drqn_aux_yr` recovered to #1 on `Q-learning` (`+9.84`, `+5.43` over zero-shot, `SUPPORTED_POS`) via risk-aware fallback to `S` (`X_mismatch` 6.5× lower), and beat `mt_structural_model` under Restored (`+1.86`, `SUPPORTED_POS`; DiD `-0.92`, `SUPPORTED_NEG`).
+  - Honest OOD boundary: on noisy unseen `Expected SARSA` (`59%` early honesty), all active probers lost to blind `prior_only` (`+4.80`; `-1.51`, `SUPPORTED_NEG`).
+- **Exp 2B (Symmetric 2-Player 4-Action Games, Zero `PROBE` Buttons, Disjoint Train/Unseen Test Splits):**
+  - **`coop_trap` (16 Train / 8 Unseen Rules):** On **unseen rules**, cross-seed **`Meta vs. Meta` (`meta_aux_yr × meta_aux_yr`)** reached **Welfare `+31.70` (`coopL=61.6%`)**, beating `Q×Q` (`+4.87`, `+26.83` `SUPPORTED_POS`), `UCB×UCB` (`+19.51`, `+12.19` `SUPPORTED_POS`), and pure-reward `meta_vanilla × meta_vanilla` (`+20.70`, `+11.00` `SUPPORTED_POS`). In `Meta vs. Non-Meta`, Meta bore unilateral probing cost (`margin < 0`) while lifting joint welfare (`Q-learner` `+6.22`, `Contextual-UCB` `+15.91`, `SUPPORTED_POS`).
+  - **`comp_rps` (4 Train / 4 Flipped-Orientation Unseen Rules):** In-dist Meta exploited stateless `UCB` (`+3.41` margin, 76.5% win) but greedy `meta_aux_yr` lost to stateful `Q-learner` (`-0.98`, `SUPPORTED_NEG`); on **unseen flipped orientations**, all Meta agents collapsed (`-0.04` vs UCB, `-0.99` vs Q-learner) due to spurious `Anchor→orientation` shortcut memorization in the narrow 4-rule training set, while tabula-rasa Non-Meta learners had zero generalization gap.
 
 ## Next Actionable Step
-1. Implement & run **Exp 2B** (Symmetric 4-Action Competition & Cooperation games: `Non-Meta vs. Non-Meta`, `Meta vs. Non-Meta`, `Meta vs. Meta` on strictly held-out unseen rules).
-2. Keep **Auxiliary Task Discovery (`보조 목표 탐색`)** as the top-priority extension after Exp 2B.
+1. **Priority Extension (`보조 목표 탐색` — Auxiliary Task Discovery):** Meta-learn auxiliary prediction weights/gates over candidate public-observation targets instead of hand-picking `aux_y/aux_r`, then generate publication figures & draft the 5-page NeurIPS report + 5-min video/quiz (deadlines Dec 17 / Dec 20).

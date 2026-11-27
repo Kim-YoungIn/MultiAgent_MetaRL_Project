@@ -1,0 +1,59 @@
+{
+  "study_id": "exp2b_symmetric_ma",
+  "git_commit": "6bd6b41",
+  "timestamp_utc": "2026-11-27T11:38:19.425982+00:00",
+  "python": "3.14.4",
+  "torch": "2.14.1+cu130",
+  "numpy": "2.5.4",
+  "rule_counts": {
+    "comp_rps": {
+      "n_train_rules": 4,
+      "n_unseen_test_rules": 4
+    },
+    "coop_trap": {
+      "n_train_rules": 16,
+      "n_unseen_test_rules": 8
+    }
+  },
+  "config": {
+    "study_id": "exp2b_symmetric_ma",
+    "output_dir": "runs/exp2b_symmetric_ma",
+    "games": [
+      "comp_rps",
+      "coop_trap"
+    ],
+    "meta_methods": [
+      "meta_drqn_aux_yr",
+      "meta_drqn_vanilla",
+      "meta_drqn_masked"
+    ],
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005
+    ],
+    "horizon": 24,
+    "primary_k": 4,
+    "n_eval_episodes": 512,
+    "eval_seed_base": 97000,
+    "hidden_dim": 64,
+    "drqn_batch_episodes": 64,
+    "drqn_iters": 400,
+    "drqn_warmup_iters": 60,
+    "drqn_replay_capacity": 8192,
+    "drqn_grad_steps": 8,
+    "drqn_minibatch": 128,
+    "gamma": 1.0,
+    "drqn_lr": 0.003,
+    "drqn_polyak_tau": 0.05,
+    "aux_opp_weight": 1.5,
+    "aux_r_weight": 1.0,
+    "drqn_log_interval": 20,
+    "n_bootstrap": 10000,
+    "delta_return": 0.3,
+    "workers": 6,
+    "device": "cpu"
+  }
+}

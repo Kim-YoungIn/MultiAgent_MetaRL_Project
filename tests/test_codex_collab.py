@@ -77,6 +77,32 @@ class TestCodexCollaborationEnv(unittest.TestCase):
         self.assertIn("results/core_v3_sealed/tables/methods.csv", pack)
         self.assertIn("results/exp2a_online_opp/tables/methods.csv", pack)
         self.assertIn("results/exp2b_symmetric_ma/tables/matchups.csv", pack)
+        self.assertIn("results/exp3a_reliability_sweep/tables/r3_obs_reliability.csv", pack)
+        self.assertIn("results/exp3b_equivariant_semantic/tables/matchups.csv", pack)
+        self.assertIn("results/exp4_multibarrier_aux_discovery/tables/methods.csv", pack)
+
+    def test_claude_collaborator_entry_and_prompts(self) -> None:
+        handoff = _load_script("codex_handoff", "scripts/codex_handoff.py")
+        self.assertTrue((ROOT / "CLAUDE.md").exists())
+        self.assertTrue((ROOT / "GEMINI.md").exists())
+        self.assertIn("AGENTS.md", (ROOT / "CLAUDE.md").read_text(encoding="utf-8"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            shutil.copytree(ROOT / ".codex", tmp_root / ".codex")
+            brief = handoff.create_task_brief(
+                task_id="TASK-998",
+                role="claude_analyst",
+                title="Test claude interim review",
+                allowed_paths=["handoff/reports/TASK-998_claude_review.md"],
+                root=tmp_root,
+            )
+            info = handoff.parse_task_brief(brief)
+            self.assertEqual(info["role"], "claude_analyst")
+            prompt = handoff.build_codex_prompt(info, tmp_root)
+            self.assertIn("Antigravity-Claude", prompt)
+            self.assertIn("CLAUDE.md", prompt)
+            self.assertIn("TASK-998", prompt)
 
 
 if __name__ == "__main__":

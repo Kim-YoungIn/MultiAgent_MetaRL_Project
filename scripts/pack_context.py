@@ -21,6 +21,7 @@ KEY_DOCS = [
     "handoff/BOARD.md",
     "docs/SPEC.md",
     "docs/PRIOR_FINDINGS.md",
+    "docs/COLLABORATION.md",
 ]
 
 KEY_RESULT_TABLES = [
@@ -28,6 +29,10 @@ KEY_RESULT_TABLES = [
     "results/core_v3_sealed/tables/methods.csv",
     "results/exp2a_online_opp/tables/methods.csv",
     "results/exp2b_symmetric_ma/tables/matchups.csv",
+    "results/exp3a_reliability_sweep/tables/r3_obs_reliability.csv",
+    "results/exp3a_reliability_sweep/tables/coop_trap_dynamics.csv",
+    "results/exp3b_equivariant_semantic/tables/matchups.csv",
+    "results/exp4_multibarrier_aux_discovery/tables/methods.csv",
 ]
 
 
@@ -56,7 +61,7 @@ def _repo_tree() -> str:
 
 def build_pack() -> str:
     sections = [
-        "# MAMRL Context Pack (Lead: Antigravity | Collaborators: Codex / GPT)",
+        "# MAMRL Context Pack (Antigravity-Gemini Lead | Antigravity-Claude & Codex CLI Collaborators)",
         f"- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"- Repo state: {_git_info()}",
         "- Legacy archive tag: `archive/v0.9-legacy-studies`",
@@ -77,7 +82,7 @@ def build_pack() -> str:
 
     present_tables = [ROOT / rel for rel in KEY_RESULT_TABLES if (ROOT / rel).exists()]
     if present_tables:
-        sections.append("---\n\n## Sealed 5-Seed Result Tables (Exp 1 / Exp 2A / Exp 2B)\n")
+        sections.append("---\n\n## Sealed 5-Seed Result Tables (Exp 1 / 2A / 2B / 3A / 3B / 4)\n")
         for tp in present_tables:
             rel = tp.relative_to(ROOT)
             lang = "json" if tp.suffix == ".json" else "csv"
@@ -91,8 +96,8 @@ def build_pack() -> str:
             "---",
             "",
             "## Collaboration & Review Protocol",
-            "- **Lead Agent:** `Antigravity`. Codex collaborators must check `handoff/BOARD.md` and their assigned `handoff/tasks/TASK-*.md` brief before acting.",
-            "- **Audit Focus (Current Milestone):** Exp 1 (`R0/R1/R3` fixed opponent), Exp 2A (`R3` online Q-learning / unseen Expected SARSA, Continuous vs Restored), and Exp 2B (symmetric 4-action `comp_rps` & `coop_trap`, disjoint unseen rules) are all sealed across 5 seeds.",
+            "- **Lead Agent:** `Antigravity-Gemini`. Collaborators (`Antigravity-Claude`, `Codex CLI`) must check `handoff/BOARD.md` and their assigned `handoff/tasks/TASK-*.md` brief before acting.",
+            "- **Audit Focus (Interim Checkpoint):** Exp 1 (`R0/R1/R3`), Exp 2A (online Q-learning / unseen Expected SARSA), Exp 2B (symmetric 4-action `comp_rps` & `coop_trap`), Exp 3A ($d \\in \\{0, 0.3, 0.6\\}$ reliability stress sweep), Exp 3B (exact $S_4$ `EquivariantDRQN` + 4 semantic families + unseen 5th family + D-031), and Exp 4 (3-layer multi-barrier `T=64` + bilevel auxiliary task discovery) are all sealed across 5 seeds.",
             "- Return concrete, unbiased critiques or verified deliverables to the exact assigned path under `handoff/reviews/` or `handoff/reports/`.",
             "",
         ]

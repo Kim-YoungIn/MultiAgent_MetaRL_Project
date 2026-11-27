@@ -32,6 +32,15 @@ REPORTS_DIR = ROOT / "handoff" / "reports"
 REVIEWS_DIR = ROOT / "handoff" / "reviews"
 
 REQUIRED_AGENT_KEYS = ("name", "description", "model", "model_reasoning_effort", "developer_instructions")
+CLAUDE_ROLES = {
+    "claude_architect": "Antigravity-Claude experimental design co-architect & scoped prototyper",
+    "claude_analyst": "Antigravity-Claude cross-study synthesis & mechanism analyst",
+    "claude_writer": "Antigravity-Claude NeurIPS report / slide / script drafter",
+}
+
+
+def is_claude_role(role: str) -> bool:
+    return role in CLAUDE_ROLES or role.startswith("claude_")
 
 
 def validate_codex_configs(root: Path = ROOT) -> list[str]:
@@ -126,7 +135,8 @@ def create_task_brief(
     root: Path = ROOT,
 ) -> Path:
     agents_dir = root / ".codex" / "agents"
-    valid_roles = {p.stem for p in agents_dir.glob("*.toml")}
+    codex_roles = {p.stem for p in agents_dir.glob("*.toml")} if agents_dir.exists() else set()
+    valid_roles = codex_roles | set(CLAUDE_ROLES.keys())
     if valid_roles and role not in valid_roles:
         raise ValueError(f"Unknown role '{role}'. Available roles: {sorted(valid_roles)}")
 
@@ -145,12 +155,13 @@ def create_task_brief(
     if report_path not in allowed_paths:
         allow_block = (allow_block + f"\n- `{report_path}`").strip()
 
+    role_ref = "CLAUDE.md" if is_claude_role(role) else f".codex/agents/{role}.toml"
     content = f"""# {task_id}: {title}
 
 - **Task ID:** `{task_id}`
-- **Assigned Role:** `{role}` (`.codex/agents/{role}.toml`)
+- **Assigned Role:** `{role}` (`{role_ref}`)
 - **Status:** `OPEN`
-- **Dispatched By:** Lead Agent (`Antigravity`)
+- **Dispatched By:** Lead Agent (`Antigravity-Gemini`)
 
 ## Objective
 {objective or title}
@@ -226,6 +237,16 @@ def load_role_config(role: str, root: Path = ROOT) -> dict:
 def build_codex_prompt(task_info: dict, root: Path = ROOT, output_via_flag: bool = False) -> str:
     rel_brief = task_info["path"].relative_to(root)
     allowed_str = ", ".join(task_info["allowed_paths"]) or "(none - read-only)"
+    if is_claude_role(task_info["role"]):
+        return (
+            f"You are collaborating on this repository as **Antigravity-Claude** (`{task_info['role']}`) alongside Lead Agent (`Antigravity-Gemini`).\n"
+            f"1. Read `AGENTS.md`, `CLAUDE.md`, `handoff/BOARD.md`, and `{rel_brief}` first.\n"
+            f"2. Execute `{task_info['task_id']}` strictly within Allowed Write Paths: [{allowed_str}].\n"
+            f"3. TOKEN EFFICIENCY: Read `handoff/context_pack.md` and compact CSV tables listed in `{rel_brief}`; skip `runs/` and full `summary.json` unless strictly needed; keep your report concise (<= 120 lines).\n"
+            f"4. Do NOT modify Lead-owned governance files (`AGENTS.md`, `docs/SPEC.md`, `PROGRESS.md`, `handoff/BOARD.md`) "
+            f"or sealed `results/` directories, and do NOT run `git commit`.\n"
+            f"5. Deliver your verified report directly to the assigned path in `{rel_brief}`."
+        )
     deliver_line = (
         f"5. Return the complete final markdown report directly as your final message (it will be saved automatically to `{task_info['allowed_paths'][0]}`)."
         if output_via_flag and task_info["allowed_paths"]
@@ -311,7 +332,8 @@ def main() -> int:
 
     if args.cmd == "status":
         roles = [p.stem for p in sorted((CODEX_DIR / "agents").glob("*.toml"))]
-        print(f"Codex roles ({len(roles)}): {', '.join(roles)}")
+        print(f"Codex CLI roles ({len(roles)}): {', '.join(roles)}")
+        print(f"Antigravity-Claude roles ({len(CLAUDE_ROLES)}): {', '.join(sorted(CLAUDE_ROLES))}")
         print("\nTasks (handoff/tasks/):")
         for tf in sorted(TASKS_DIR.glob("TASK-*.md")):
             info = parse_task_brief(tf)

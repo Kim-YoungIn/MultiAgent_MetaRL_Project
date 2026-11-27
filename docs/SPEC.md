@@ -101,13 +101,39 @@ Implemented in `src/mamrl/eval/exact_dp.py` using exact rational arithmetic (`fr
 
 | Tier | Matrix | Compute & Priority |
 |---|---|---|
-| **Core (Mandatory)** | `R0, R1, R3` × Fixed Reactive Opponent × 5 seeds (`rl2`, `rl2_masked`, `prior_only`, `contextual_ucb`, `structural_model`, `arm_ucb`, `greedy`, `random`, `bayes_optimal`, `clairvoyant`) | 3 trained agents × 3 regimes × 5 seeds = **45 fits** (`2^18` pilot → up to `2^20` locked). Must complete & verify first. |
-| **Secondary (Multi-Agent Non-Stationarity)** | `R3` × Online Q-Learning Opponent (both zero-shot transfer of fixed-trained `rl2` AND matched training on online Q-learning opponent; Restored vs. Continuous with visible reset indicator + Counterpart Return) | 15 fits (matched) + zero-shot eval. Bounded/approximate diagnostics (no false exact full-horizon Oracle claim). |
-| **Optional (Only If Time Permits)** | `R2` (categorical observation noise), `Layer 2` (cross-fitted mixed exploiter), `H1` diversity (fixed budget vs. fixed exposure) | Drop before ever cutting independent training seeds below 5. |
+| **Core (Exp 1 — Mandatory)** | `R0, R1, R3` (`d=2` bits, 4 types) × Fixed Reactive Opponent × 5 seeds (`rl2`, `rl2_masked`, `prior_only`, `contextual_ucb`, `structural_model`, `arm_ucb`, `greedy`, `random`, `bayes_optimal`, `clairvoyant`) | 3 trained agents × 3 regimes × 5 seeds = **45 fits** (`2^18` dev pilot → up to `2^20` locked). Runs in minutes on local CPU multiprocessing. |
+| **Secondary A (Exp 2A — Multi-Agent Non-Stationarity)** | `R3` × Online Q-Learning / Unseen Expected SARSA Opponents (zero-shot transfer + matched training; Restored vs. Continuous with visible reset indicator + Counterpart Return) | 15 fits (matched) + zero-shot eval. Bounded/approximate diagnostics (no false exact full-horizon Oracle claim). |
+| **Secondary B (Exp 2B — Unseen Compositional Rules & Distance)** | $d$-bit ($d=3$ or $4$, 8–16 types) linear/null-space sensing extension of Delayed-Response with **strictly held-out unseen $\theta$ combinations** and quantitative **Hamming-distance generalization** analysis | Directly addresses 4-type memorization risk and quantitative rule-distance without reviving ad-hoc DSLs. |
+| **Optional (Only If Time Permits)** | `R2` (categorical observation noise), `Layer 2` (cross-fitted mixed exploiter), `H1` exposure-vs-budget split | Drop before ever cutting independent training seeds below 5. |
 
 ### Milestones
-- **Nov 27 – Dec 1:** Lock SPEC v3.0, implement R0/R1/R3 + exact rational DP Gate 0 + PPO-GAE + baselines, pass unit tests.
+- **Nov 27 – Dec 1:** Lock SPEC v3.0, implement R0/R1/R3 + exact rational DP Gate 0 + PPO-GAE + baselines + logging, pass unit tests.
 - **Dec 2 – Dec 5:** Dev pilots (`2^18` transitions), verify learning curves & wall-clock throughput, lock hyperparameters.
-- **Dec 6 – Dec 11:** Sealed multi-seed Core + Secondary runs & independent verification.
+- **Dec 6 – Dec 11:** Sealed multi-seed Core (Exp 1) + Secondary (Exp 2A/2B) runs & independent verification.
 - **Dec 12 – Dec 15:** Figures, 5-page NeurIPS report draft, slides, 5-min video & 3 quiz questions.
 - **Dec 16:** Buffer & `<5 MB` code zip audit (**Dec 17 23:59** Video+Quiz; **Dec 20 23:59** Report+Code+Slides).
+
+---
+
+## 7. Logging, Measurement & Statistical Verification Contract
+
+### A. Artifact & Recording Layout (Local Raw `runs/` vs. Git-Tracked `results/`)
+- **Local Raw (`runs/<study_id>/`, gitignored, resumable):**
+  - `manifest.json`: full config, git commit, Python/Torch/NumPy versions, Gate-0 summary hash, seed list, UTC timestamp.
+  - `fits/<regime>_<method>_seed<S>/`:
+    - `receipt.json` (atomic `tmp -> rename`): offline train transitions, online eval turns, wall time, checkpoint & eval SHA-256.
+    - `train_curve.csv`: periodic updates (`mean_return`, `median_return`, `policy_entropy`, `approx_kl`, `clip_frac`, `value_loss`, `explained_var`, opening action distribution, exploration/exploitation repetition rates).
+    - `checkpoint.pt`: final model weights.
+    - `eval_episodes.npz`: turn-level trajectories (`theta[E]`, `actions[E,T]`, `opp_actions[E,T]`, `focal_rewards[E,T]`, `opp_rewards[E,T]`) for zero-retrain independent audits (~150 KB/fit).
+  - `summary.json` & `tables/*.csv`: aggregated metrics, paired contrasts, Layer-1 `K=2,4,8` audits, `by_theta` breakdowns.
+- **Git-Tracked (`results/<study_id>/`, `< 5 MB` budget):** Only sealed `manifest_summary.json`, `summary.json`, compact CSV tables, and publication figures. Never commit checkpoints or raw `.npz` files.
+- **Dev vs. Sealed Rule:** `runs/dev_*` is strictly for hyperparameter/throughput validation and never cited as final evidence.
+
+### B. Mandatory 4-Axis Measurements
+1. **Optimization Health:** Training return curves, policy entropy (collapse check), PPO KL/clip/explained variance, offline vs. online interaction budgets reported separately.
+2. **End-to-End Distribution & Speed ($T=24$, balanced $\theta$, paired episodes):** Mean, Median, IQR, Bayes-Opt gap, **Win / Tie / Loss rates** (ties separate), turn-by-turn reward curve, Early/Mid/Late AUC, Time-to-Threshold (+ right-censored rate), and per-type (`by_theta`) breakdown.
+3. **Behavioral & Repetition Diagnostics:** Phase-separated action distributions (`explore 1..K` vs `exploit K+1..T`: `S, P, P0, P1, X_match, X_mismatch`), **action repetition rates** (`repeat_rate_explore`, `repeat_rate_exploit`, `repeat_rate_all`), `unique_actions_explore`, `top_prefix_sequences`, `opening_probe_rate`, and **`k4_branching_tv`** (TV distance of turn-3 action distribution conditioned on $y_2=0$ vs $y_2=1$).
+4. **Exploration vs. Exploitation Decomposition (`K ∈ {2, 4, 8}`, primary `K=4`) & 4-Way Statistical Verdict:**
+   - **Layer 1:** `restored_commitment_value` $C(b)$, `restored_adaptive_value` $V^*(b)$, `restored_opportunity_gap`, `prefix_reward`, net cost-inclusive restored returns, posterior entropy & rule ID rate.
+   - **Layer 3 (Non-OOD):** `live_continuation_gap` $= V^*(q_K, b(\tau_{1:K})) - R_{K+1:T}^{\text{actual}}$ + disjoint-split `hidden_state_linear_probe_acc` (diagnostic only).
+   - **Hierarchical Paired Bootstrap (10,000 resamples, training seed as independent unit)** with pre-declared thresholds ($\delta_{\text{info}} = 0.25$, $\delta_{\text{total}} = 0.30$) classifying every primary contrast into `SUPPORTED_POS`, `SUPPORTED_NEG`, `RESOLVED_NULL`, or `INCONCLUSIVE`.

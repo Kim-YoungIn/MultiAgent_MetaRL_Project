@@ -1,0 +1,49 @@
+{
+  "benchmark": "Simultaneous Delayed-Response Game (R0 / R1 / R3)",
+  "horizon": 24,
+  "exact_arithmetic": "fractions.Fraction",
+  "regimes": {
+    "R0": {
+      "bayes_optimal_value": 20.2,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 15.4,
+      "myopic_openings": ["S"],
+      "optimal_openings": ["S"],
+      "opening_margin": 0.0,
+      "must_change_opening": false,
+      "open_loop_bounds": {"1": 20.2, "2": 19.4, "4": 17.8, "8": 14.6},
+      "feedback_conditioning_headroom": {"1": 0.0, "2": 0.8, "4": 2.4, "8": 5.6}
+    },
+    "R1": {
+      "bayes_optimal_value": 19.1,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 14.3,
+      "myopic_openings": ["S"],
+      "optimal_openings": ["P"],
+      "opening_margin": 0.8,
+      "must_change_opening": true,
+      "open_loop_bounds": {"1": 19.1, "2": 19.1, "4": 17.5, "8": 14.3},
+      "feedback_conditioning_headroom": {"1": 0.0, "2": 0.0, "4": 1.6, "8": 4.8}
+    },
+    "R3": {
+      "bayes_optimal_value": 17.575,
+      "clairvoyant_value": 21.0,
+      "blind_value": 4.8,
+      "feedback_value": 12.775,
+      "myopic_openings": ["S"],
+      "optimal_openings": ["P0", "P1"],
+      "opening_margin": 0.8,
+      "must_change_opening": true,
+      "open_loop_bounds": {"1": 17.575, "2": 17.575, "4": 16.9, "8": 13.7},
+      "feedback_conditioning_headroom": {"1": 0.0, "2": 0.0, "4": 0.675, "8": 3.875}
+    }
+  },
+  "local_throughput_benchmark": {
+    "transitions": 264192,
+    "vectorized_env_sec": 0.009,
+    "gru64_cpu_sec": 0.700,
+    "gru64_cuda_sec": 0.790
+  }
+}

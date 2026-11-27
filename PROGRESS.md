@@ -3,19 +3,16 @@
 ## Objective & Stage
 - **Goal:** Unbiased empirical inquiry into how meta-learning affects exploration and fast adaptation in multi-agent repeated games.
 - **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
-- **Stage:** **Design Verification Gate (v2.2)**. Adopted unprivileged End-to-End `RL²` (Recurrent PPO+GAE) + **3-Layer Exploration/Exploitation Decomposition** (Neutral Bayes Info/Value Audit + Mixed-Prefix Neutral Exploiter + Belief/Exploitation Audit) to eliminate Student bottleneck and OOD prefix-swap bias.
+- **Stage:** **SPEC v3.0 Locked & Gate-0 Exact Rational DP Passed (13/13 tests OK)**. Ready to implement PPO+GAE `RL²` / `RL²-Masked` / `Prior-Only` + Contextual UCB / Structural-Model baselines and run dev pilots.
 
 ## Completed Work (Verified)
-- Archived full legacy repo (`290dabf`, 15 verified studies) at git tag `archive/v0.9-legacy-studies`; distilled failures into `docs/PRIOR_FINDINGS.md` and preserved compact evidence (`results/legacy_summary/`, 340 KB).
-- Rebuilt clean v2 repo on `refactor/v2-clean` (1.7 MB tracked footprint, 6/6 baseline core tests passing).
-- Finalized unbiased `docs/SPEC.md` (v2.2) & `AGENTS.md`: R0–R3 observability/complexity regimes, strictly unprivileged baselines, 3-layer Exploration/Exploitation decomposition without OOD bias, Opponent-Restored vs. Continuous shaping split, and pre-registered interpretation rules.
-
-## Open Verification Points (`docs/SPEC.md` §5)
-1. Exact R3 multi-agent game rules (genuinely multi-agent + tractable Gate-0 Oracle & Layer-1 Bayes audit).
-2. Standard GRU vs. Action-Equivariant Set/Attention architecture under action relabeling.
-3. Exact $(T, K_{\text{audit}})$ & PPO-GAE training budget.
-4. Matrix sizing for the 2026-12-17 hard deadline.
+- Adopted independent review (`handoff/reviews/20261127_spec_v2_2_independent_review.md`) into locked `docs/SPEC.md` (v3.0): matched R0/R1/R3 Simultaneous Delayed-Response Game (`T=24`, primary audit `K=4`), `Prior-Only` vs. `RL²-Masked` (trained under mask), Contextual UCB + Structural-Model baselines, Layer-1 Bayes decision-value audit, non-OOD Layer-3 gap, and Core/Secondary milestones.
+- Implemented `src/mamrl/envs/delayed_response.py` (exact scalar + vectorized batch env) and `src/mamrl/eval/exact_dp.py` (exact `Fraction` DP). Verified 13/13 tests in `2.43 s` (`results/gate0_exact_dp.json`):
+  - **R0 (Passive):** Bayes-opt `20.2`, opening `S` (`margin = 0.0`, `must_change = False`).
+  - **R1 (1-Step Active):** Bayes-opt `19.1`, opening `P` (`margin = +0.8`, `must_change = True`, `K=2` open-loop `19.1`).
+  - **R3 (2-Step Adaptive):** Bayes-opt `17.575`, opening `P0/P1` (`margin = +0.8`, `K=4` open-loop `16.9`, `headroom = +0.675`).
+- Benchmarked local throughput for `2^18` transitions (`B=256, T=24`): vectorized env `0.009 s`, `GRU-64` CPU `0.700 s`, CUDA `0.790 s` — **local CPU multiprocessing is faster than Colab GPU with zero setup/sync overhead**.
 
 ## Next Actionable Step
-1. Share `handoff/context_pack.md` with GPT / `research_critic` to audit `docs/SPEC.md` v2.2 and close §5 design questions.
-2. Lock `docs/SPEC.md`, upgrade `src/mamrl/` to `RL²`-PPO + 3-Layer Decomposition + R0–R3 regimes, verify tests & Gate-0 Oracle, and run Exp 1.
+1. Implement `RL²` (Recurrent PPO+GAE, `gamma=1, lambda=0.95`), `RL²-Masked`, `Prior-Only`, `Contextual UCB`, `Structural-Model`, `Arm-UCB/Greedy/Random`, and Layer-1/Layer-3 evaluation pipeline in `src/mamrl/`.
+2. Run dev pilot (`2^18` transitions, learning-curve & wall-time audit) on `R0/R1/R3`, verify tests, then launch sealed 5-seed Core runs (45 fits).

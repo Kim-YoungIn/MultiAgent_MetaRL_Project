@@ -1,100 +1,113 @@
-# Experimental Design Specification — Design Verification Draft (v2.2)
+# Experimental Design Specification — Locked v3.0
 
-> **Status:** Architecture adopted (`RL²`-PPO + 3-Layer Exploration/Exploitation Decomposition); under final design verification before locking implementation and running experiments.
-> **Guiding Principle:** Stay strictly anchored to the core research question. Every hypothesis is framed symmetrically so positive, conditional, and negative/null outcomes are equally informative. We never tune environments solely to make Meta-RL win.
+> **Status:** Adopted & locked (incorporating independent review `handoff/reviews/20261127_spec_v2_2_independent_review.md`).
+> **Guiding Principle:** Unbiased inquiry anchored strictly to the core research question. Positive, conditional, and null/inconclusive outcomes are treated with equal scientific value. No environment tuning solely to force Meta-RL to win.
 
 ---
 
-## 1. Core Research Question & Scope
+## 1. Core Research Question & Two-Part Structure (Path A)
 
 > **멀티에이전트 반복 게임 환경에서 메타 러닝이 탐색(exploration)을 개선하여 새로운 게임 규칙과 학습 상대에 대한 빠른 적응(fast adaptation)에 어떤 영향을 미치는가?**
 
-### Two-Part Research Structure (Path A, aligned with Dec 17/20 Deliverables)
-- **Part 1 (Completed — `docs/PRIOR_FINDINGS.md`, tag `archive/v0.9-legacy-studies`):**
-  Empirical diagnosis of 15 prior studies showing why standard multi-agent meta-exploration setups failed to beat UCB or improve median returns: passive/greedy actions already leaked rules (only 6/96 pairs required changing the opening move), mean gains hid median losses (`+0.446` mean vs `−0.144` median), long-horizon gains were confounded with opponent shaping (`+0.365` counterpart return), and task-count scaling at fixed compute diluted per-task exposure.
-- **Part 2 (Active Design Under Verification):**
-  Controlled multi-agent study using an unprivileged **End-to-End `RL²` (Recurrent PPO+GAE)** meta-learner paired with a **3-Layer Exploration vs. Exploitation Decomposition** to test *when—if ever—meta-learning improves exploration itself*, cleanly separating (i) observability / exploration complexity, (ii) exploration vs. exploitation vs. zero-shot prior, (iii) pure information gain vs. opponent shaping, and (iv) task diversity vs. per-task exposure.
+- **Part 1 (Completed — `docs/PRIOR_FINDINGS.md`, git tag `archive/v0.9-legacy-studies`):**
+  15 historical studies showed meta-learned exploration increased *mean* return (`+0.446 / +0.428`) while lowering the *median* (`−0.144 / −0.142`, win-rate 40%) and losing to UCB—because passive/greedy play already leaked task identity (only 6/96 pairs required changing the opening move), and long-horizon gains were confounded with opponent shaping (`+0.365` counterpart return).
+- **Part 2 (Locked Core + Secondary Study):**
+  Matched multi-agent information-structure study (`R0`, `R1`, `R3`) using unprivileged End-to-End `RL²` (Recurrent PPO+GAE) and rigorous decision-value decomposition to test *whether and under what information structures meta-learning changes exploration and adaptation*.
 
 ---
 
-## 2. Neutral, Falsifiable Research Questions
+## 2. Benchmark Environment: Simultaneous Delayed-Response Game (`R0 / R1 / R3`)
 
-### RQ1 — Observability & Exploration Complexity
-*How does the relative adaptation performance—and specifically the exploration quality—of `RL²` (vs. Greedy, Random, Arm-Independent UCB, and Memory-Reset) vary across regimes of observability and structural coupling?*
+Implemented in `src/mamrl/envs/delayed_response.py` (exact scalar + vectorized batch simulator).
 
-We evaluate **four matched benchmark regimes** (same action count $n$, horizon $T$, and exploitation payoff scale, verified by Gate-0 exact Oracle before training):
+### Shared Structure Across All Regimes
+- **Focal Action Space ($n = 8$, fixed semantic labels in Core):**
+  $A = \{S, P, P_0, P_1, X_{00}, X_{01}, X_{10}, X_{11}\}$.
+- **Common Opponent Action/Observation Alphabet ($|\mathcal{Y}| = 4$):** $y \in \{0, 1, 2, 3\}$.
+- **Hidden Opponent Type:** $\theta = (b, c) \in \{0, 1\}^2$ (4 equiprobable types, indexed $2b + c \in \{0, 1, 2, 3\}$).
+- **Public State:** $q_t = a_{t-1}$ (previous focal action), initialized at $q_0 = S$.
+- **Simultaneous Move Protocol:** At turn $t = 1 \dots T$, focal chooses $a_t$ and opponent chooses $y_t$ simultaneously. Opponent observes $q_{t-1}$ (not $a_t$). Next state $q_t = a_t$.
+- **Focal Reward $r_F(q_{t-1}, a_t, y_t)$ (identical across R0/R1/R3):**
+  - $a_t = S \Rightarrow +0.2$
+  - $a_t \in \{P, P_0, P_1\} \Rightarrow -0.1$
+  - $a_t \in \{X_{00}, X_{01}, X_{10}, X_{11}\} \Rightarrow +1.0$ if $(q_{t-1} = a_t \land y_t = 1)$ else $-2.0$.
+- **Opponent Utility $r_O(q_{t-1}, a_t, y_t; \theta)$:**
+  $2.0 \cdot \mathbb{1}[y_t = f_\theta(q_{t-1})] + 0.5 \cdot \mathbb{1}[a_t = q_{t-1} \in X \land y_t = 1]$.
+  Honest fixed response $y_t = f_\theta(q_{t-1})$ is strictly incentive-compatible; online opponents learn $Q(q, y)$ from $r_O$.
+- **Horizon & Audit Windows:** Primary $T = 24$, primary prefix audit $K = 4$ (diagnostics $K \in \{2, 8\}$; $T \in \{16, 32\}$ sensitivity if warranted by Gate 0).
 
-| Regime | Rule Identification Structure | Gate-0 Oracle Property | What This Tests |
-|---|---|---|---|
-| **R0: Passive Deterministic** | Safe/greedy action deterministically leaks latent rule $\theta$ (mirrors legacy studies) | `VoI > 0`, `must_change = 0%` | Baseline control: confirms Greedy/UCB suffice when passive play reveals the rule. |
-| **R1: Active Deterministic (1-step)** | Safe action is uninformative; 1 costly probe reveals $\theta$ deterministically | `VoI > 0`, `must_change = 100%` | Tests whether 1-step active necessity alone favors Meta-RL, or whether simple UCB still matches/beats it. |
-| **R2: Active Noisy (i.i.d. Noise Control)** | Same as R1, plus symmetric Gaussian reward noise across actions | `VoI > 0`, `must_change = 100%` | **Anti-bias control:** tests whether pure stochasticity alone helps Meta-RL or hurts Meta-RL *more* than UCB via optimization variance. |
-| **R3: Structured Partial Observability (Aliased / Multi-Step)** | $M \ge 4$ latent rule/opponent regimes over $n \ge 6$ actions; risky high-stakes actions incur steep mismatch penalties and are aliased/noisy, while low-cost probes (or 2-step feedback-contingent probing + opponent reaction) carry high-SNR cross-action clues | `VoI > 0`, `must_change = 100%`, 1-step probe insufficient | Tests the core hypothesis: when $(Q, V)$ cannot be solved independently per arm in 1 step, does **feedback-conditioned `RL²`** learn superior active exploration over UCB and open-loop exploration? |
+### Matched Information Regimes (Only $f_\theta(q)$ Changes)
 
-### RQ2 — Multi-Agent Non-Stationarity: Information Gain vs. Opponent Shaping
-*Against fixed reactive opponents vs. online learning opponents (`Q-learning` / `Expected SARSA`), how much of any adaptation gain is pure information acquisition versus shaping the opponent and game state?*
+| Regime | Opponent Response Function $f_\theta(q)$ | Information Structure Tested |
+|---|---|---|
+| **R0: Passive Immediate** | $f_\theta(S) = \theta \in \{0,1,2,3\}$; $f_\theta(P)=f_\theta(P_0)=f_\theta(P_1)=0$; $f_\theta(X_{ij})=\mathbb{1}[\theta=(i,j)]$ | Safe opening $S$ passively reveals all 2 bits of $\theta$. Active probing unnecessary (`must_change = False`). |
+| **R1: Active 1-Step** | $f_\theta(S)=0$; $f_\theta(P) = \theta \in \{0,1,2,3\}$; $f_\theta(P_0)=f_\theta(P_1)=0$; $f_\theta(X_{ij})=\mathbb{1}[\theta=(i,j)]$ | Costly opening $P$ required (`must_change = True`), but 1 open-loop probe reveals all 2 bits (no feedback branching needed). |
+| **R3: Active 2-Step Adaptive** | $f_\theta(S)=0$; $f_\theta(P)=b$; $f_\theta(P_0)=\mathbb{1}[b=0,c=1]$; $f_\theta(P_1)=\mathbb{1}[b=1,c=1]$; $f_\theta(X_{ij})=\mathbb{1}[\theta=(i,j)]$ | Each probe yields $\le 1$ bit; strictly requires **both** active opening (`P0/P1` over `S`) **and** feedback-conditioned adaptive probing at $K=4$. |
 
-- Every regime is evaluated under **both** paired protocols on identical test tasks and seeds:
-  1. **Controlled (Opponent-Restored):** Snapshot opponent & env state before the first $K$ turns; evaluate post-prefix exploitation with opponent restored to its initial state. Isolates pure information value.
-  2. **Continuous Deployment (Both Agents Learning):** Keep live opponent state and online learning running over $T$ turns; log both **Focal Return** and **Counterpart Return** (`both_up`, `both_down`, action shift).
-
-### RQ3 — Training Diversity (H1): Diversity vs. Exposure Dilution
-*In the regime(s) where active exploration matters, how does increasing rule & opponent diversity (`Low / Medium / High`) affect held-out exploration quality and adaptation?*
-
-- Explicitly separate **two compute controls**:
-  1. **Fixed Total Budget:** Total training interactions constant while diversity increases (tests diversity vs. exposure dilution).
-  2. **Fixed Per-Task Exposure:** Interactions per training task constant (isolates generalization effect of diversity).
-
----
-
-## 3. Core Architecture: Unprivileged `RL²` + 3-Layer Exploration/Exploitation Decomposition
-
-### A. Evaluated Agents (Strictly Unprivileged — Zero Access to Hidden `spec`)
-All evaluated agents observe only `(prev_self_action, prev_opp_action, prev_self_reward, is_start, turn_frac)`:
-1. **`rl2` (Primary Meta-Learner):** End-to-end Recurrent Actor-Critic (GRU + PPO with GAE value baseline) acting across all $T$ turns. No fixed-$K$ handoff constraint; learns *when* to explore, *when* to exploit, and *when* to re-explore if the opponent adapts.
-2. **`rl2_masked` (Open-Loop Control):** Identical GRU + PPO architecture and training budget, but opponent action and reward feedback are masked during the early exploration window ($t < K_{\text{audit}}$) and unmasked afterward. Isolates **feedback-conditioned active exploration** from memorized open-loop probing sequences.
-3. **`memory_reset` (Zero-Shot Prior Control):** Identical policy trained/evaluated with hidden state reset every turn (or feedforward MLP). Isolates **zero-shot prior / static policy** from within-task adaptation.
-4. **`ucb` (Arm-Independent UCB):** Empirical per-action mean + count bonus (`mean_a + beta * sqrt(log(t+1)/(N_a+1))`), tuned strictly on dev seeds.
-5. **`greedy` (Empirical Greedy):** Empirical per-action greedy baseline (no exploration bonus).
-6. **`random_then_exploit` (Random Prefix Control):** Uniform random exploration for $K_{\text{audit}}$ turns, followed by greedy empirical exploitation (or neutral exploiter in prefix-swap).
-7. **`oracle` (Diagnostic Ceiling Only — Privileged):** Exact Bayes-optimal policy with access to the task-family likelihood; used strictly to calibrate headroom, never as a baseline competitor.
-
-### B. Solving the Exploration vs. Exploitation Decomposition Problem (Without OOD Bias)
-
-A known pitfall of naive Prefix-Swap on `RL²` is **off-policy distribution shift**: if `RL²`'s GRU was trained only on its own trajectories, feeding it a `Random` or `UCB` prefix at test time could hurt `RL²` simply because the prefix is out-of-distribution (OOD), not because it contains less information.
-
-To make Exploration vs. Exploitation attribution **airtight and free of OOD bias**, we apply **three complementary, cross-checked decomposition layers** at audit horizons $K \in \{2, 4, 8\}$:
-
-| Layer | Mechanism | What It Measures | Confound Eliminated |
-|---|---|---|---|
-| **Layer 1: Neutral Bayes Info & Value Audit (Policy-Agnostic)** | Feed the exact first-$K$ trajectory $\tau_{1:K}$ collected by each method (`rl2`, `rl2_masked`, `ucb`, `random`, `greedy`, `oracle`) into an exact **policy-agnostic Bayesian posterior evaluator** over hidden $\theta$ / opponent type. Measure (a) posterior entropy $H(\theta \mid \tau_{1:K})$ and rule ID accuracy, and (b) Bayes-optimal post-prefix value $V^*(\tau_{1:K})$ (opponent-restored). | **Objective Exploration Quality** (how much decision-relevant information $\tau_{1:K}$ actually contains). | **Zero OOD bias** and **zero Student bottleneck**! |
-| **Layer 2: Neutral Mixed-Prefix Exploiter (Model-Free Prefix-Swap)** | Train a separate frozen recurrent **Neutral Exploiter** on a *balanced mixture* of prefixes generated by `random`, `ucb`, `greedy`, and `rl2` (so no prefix distribution is OOD). At test time, swap only the first-$K$ prefix across methods and evaluate turns $K+1..T$ with this shared Neutral Exploiter (under both Opponent-Restored and Continuous settings). | **Model-Free Exploration Quality** (can an unprivileged learner convert $\tau_{1:K}$ into higher downstream reward?). | Separates Exploration from Exploitation **and** removes on-policy OOD preference for `rl2`. |
-| **Layer 3: Exploitation & Belief Decoding Audit (`RL²` Self-Check)** | (a) Compare `rl2`'s own deployed return against `rl2` fed an `oracle` prefix (and against Layer 1 $V^*(\tau_{1:K})$) to measure **exploitation efficiency**. (b) Fit a lightweight post-hoc linear probe on `rl2`'s hidden state $h_t$ to measure how fast `rl2` internally decodes hidden $\theta$ and predicts the opponent's next action. | **Exploitation & Inference Efficiency** (did `rl2` actually use the information it gathered?). | Separates "failed to gather info" from "gathered info but failed to decode/exploit it". |
-
-*(Optional ablation: include a Decoupled Teacher–Student arm on R3 to test whether explicit decoupling improves over end-to-end `RL²`.)*
+*(Optional **R2: Categorical Observation Noise** applies discrete symbol-flip noise to $y$ while preserving finite belief DP, kept outside Core unless Core + Secondary finish early.)*
 
 ---
 
-## 4. Mandatory Metrics & Pre-Registered Decision Criteria
+## 3. Agents, Baselines & Unprivileged Fairness Rules
 
-Every final experiment runs across **$\ge 5$ independent training seeds** on a **sealed test split** (disjoint from dev seeds), paired per game and reset, reporting:
-- **End-to-End Performance:** Mean, **Median**, IQR, and **Win-Rate (%)** vs. `greedy`, `ucb`, `memory_reset`, and `rl2_masked`.
-- **Exploration Quality (Layers 1 & 2):** Posterior entropy reduction $\Delta H(\theta \mid \tau_{1:K})$, rule ID accuracy, Neutral Bayes $V^*(\tau_{1:K})$, and Mixed-Prefix Neutral Exploiter return (Opponent-Restored & Continuous).
-- **Adaptation Speed & Cost:** Early-turn AUC, Time-to-Threshold (with right-censoring rate), Exploration-window return, Total Return ($1..T$).
-- **Multi-Agent Shaping Check:** Counterpart Return, Controlled vs. Continuous gap.
+**Zero test-task `spec` leakage:** No evaluated agent receives $\theta$ or $f_\theta$. Offline training transitions and online test interactions are reported separately.
 
-### Pre-Registered Interpretation Rules (Preventing Goalpost Moving)
-- **Meta-Learning Truly Improves Exploration:** `rl2` beats `ucb`, `random`, and `rl2_masked` in **both** end-to-end Mean & Median Total Return **AND** in **Layer 1 (Neutral Bayes Info/Value)** + **Layer 2 (Mixed-Prefix Neutral Exploiter, Opponent-Restored)** (95% bootstrap CI > 0, win-rate > 50%).
-- **Prior/Exploitation Gain Without Better Exploration:** `rl2` beats baselines in end-to-end Total Return, **but** fails to beat `ucb`/`random` on Layer 1 & Layer 2 → honest finding that meta-learning improved *exploitation/prior*, not *exploration*.
-- **Shaping-Driven Multi-Agent Gain:** `rl2` gains in Continuous Deployment (+ Counterpart Return shift) while showing near-zero Controlled (Opponent-Restored) gain → honest finding that gains stem from *opponent shaping*, not pure information gathering.
-- **Honest Null / Regime-Bounded Finding:** `rl2` loses/ties in R0/R1/R2 and succeeds only in R3 (or fails across all regimes, diagnosed via Layer 3) → reported transparently as the empirical boundary of meta-learned exploration.
+### Core Evaluated Policies (5 Independent Training Seeds for All Learned Agents)
+1. **`rl2` (Primary Meta-Learner):** Standard GRU Actor-Critic trained with **PPO + GAE** ($\gamma = 1.0$, $\lambda \approx 0.95$, full episode sequences, undiscounted total return). Input: `(one_hot(prev_a), one_hot(prev_y), prev_r, is_start, reset_flag, turn_frac)`.
+2. **`rl2_masked` (Early-Masked Control):** Identical GRU + PPO+GAE trained **under its own mask** for $t < K_{\text{audit}}$ (hiding opponent action & reward for $t < K$, **no retrospective revelation**; begins observing live feedback at $t \ge K$).
+3. **`prior_only` (True Zero-Shot Blind Control):** Identical training budget with **no feedback inputs at any turn** (time/self-action only). *(Distinct from Memory-1 reset, which retains 1-step feedback.)*
+4. **`contextual_ucb` (State-Action UCB Baseline):** Unprivileged UCB over `(q, a)` pairs, hyperparameter tuned strictly on dev seeds.
+5. **`structural_model` (Meta-Trained Structural Baseline):** Unprivileged empirical transition/reward model $\hat{P}(y \mid q), \hat{r}(q,a,y)$ fitted on the **same offline meta-training rollouts** (no `spec` access), paired with online posterior/Thompson or UCB action selection during test episodes.
+6. **`arm_ucb`, `greedy`, `random`:** Standard stateless/myopic reference baselines.
+
+### Diagnostic Ceilings (Privileged — Never Compared as Baselines)
+- **`bayes_optimal`:** Exact rational DP policy starting from uniform prior over $\theta \in \{0,1,2,3\}$ (true achievable ceiling under fixed reactive opponent).
+- **`clairvoyant`:** Knows true $\theta$ from turn 0 (measures total irreducible uncertainty cost).
 
 ---
 
-## 5. Open Design Questions for Independent Verification (GPT / Critic Checklist)
+## 4. Exact Gate-0 & Decision-Value Decomposition Audits
 
-Before freezing `src/mamrl/` and running final multi-seed experiments:
-1. **R3 Game Design (Truly Multi-Agent + Tractable Oracle):** What is the cleanest 2-player repeated game for R3 where (a) 1-step probing is insufficient (needs 2-step feedback-contingent probing or risky vs. safe-probe discrimination), (b) the opponent's hidden type/learning genuinely interacts with both the probe signal and optimal exploitation (not a disguised single-agent bandit), and (c) Gate-0 exact Oracle & Layer-1 Neutral Bayes posterior remain fast and exact?
-2. **Action-Label Permutation & Network Architecture:** Under `high` diversity (action relabeling), should `rl2` use a standard `GRU` or an **Action-Equivariant Attention / Set-GRU** (or compare both on dev) so permutation invariance isn't a hidden confound?
-3. **Training Objective & Horizon:** Should `rl2` train strictly on full-episode undiscounted/discounted Total Return ($1..T$), and what $(T, K_{\text{audit}})$ cleanly separates exploration cost recovery from asymptotic saturation without blowing up compute?
-4. **Scope vs. 2026-12-17 Deadline:** Is `R0–R3 × (Reactive vs. Q-Learning Opponent) × 3-Layer Decomposition + H1 (Fixed Budget vs. Fixed Exposure)` well-scoped for 20 days to the 5-min video + 5-page NeurIPS report, or should we prioritize a tighter core matrix?
+Implemented in `src/mamrl/eval/exact_dp.py` using exact rational arithmetic (`fractions.Fraction`):
+
+1. **Gate-0 Exact Verification (Mandatory Before Training):**
+   - **Opening Necessity:** $Q^*(\text{prior}, a^*) - \max_{a \in \arg\max E[r]} Q^*(\text{prior}, a) > \varepsilon$.
+   - **Feedback Value:** $V_{\text{adaptive}} - V_{\text{blind}}$ and $V_{\text{adaptive}} - V_{\text{best } K\text{-open-loop}}$ at $K \in \{2, 4, 8\}$.
+   - Exact rational verification runs on all actual regime implementations (`R0`, `R1`, `R3`) and is asserted in `tests/test_delayed_response.py`.
+2. **Layer 1 — Primary Exploration Audit (Policy-Agnostic Exact Bayes Decision Value):**
+   Given the realized first-$K$ trajectory $\tau_{1:K}$ collected by each policy (producing exact posterior $b(\tau_{1:K})$ over $\theta$):
+   - **Restored Commitment Value:** $C(b) = \max_{\pi \in \Pi_{\text{blind}}} \mathbb{E}_b[R_{K+1:T}(\pi)]$ from common reset state $q = S$.
+   - **Restored Adaptive Continuation Value:** $V^*(b)$ (Bayes-optimal remaining value from reset $q = S$, horizon $T - K$), plus opportunity gap $V_{\text{clairvoyant}}(b) - V^*(b)$.
+   - **Prefix Cost & Net Return:** Prefix reward $R_{1:K}$ and net cost-inclusive return reported separately alongside posterior entropy $H(\theta \mid \tau_{1:K})$ (secondary).
+3. **Layer 3 — Non-OOD Exploitation Efficiency Audit:**
+   - **No OOD Oracle-prefix injection into on-policy `RL²`.** Instead, on each policy's *own realized histories*, compute the continuation gap $V^*(q_K, b(\tau_{1:K})) - R_{K+1:T}^{\text{actual}}$ (zero OOD shift!).
+   - Post-hoc linear probe on `RL²` hidden states $h_t$ (trained/evaluated on disjoint rollouts) reported strictly as diagnostic, not causal proof.
+4. **Layer 2 (Optional Secondary Corroboration):** Cross-fitted frozen Mixed-Prefix Neutral Exploiter trained on all evaluated prefix generators (including reset indicators), kept secondary to Layer 1.
+
+---
+
+## 5. Statistical Protocol & Pre-Registered Primary Endpoints
+
+- **Independent Statistical Unit:** Training seed ($N \ge 5$ independent seeds per trained agent; paired hierarchical bootstrap over seeds/test episodes; ties reported separately).
+- **Separate Estimands (Not Conflated):**
+  1. **Information Acquisition (Primary Exploration Endpoint):** At $K = 4$, does `rl2` improve restored Bayes decision-relevant value ($C(b)$ and $V^*(b)$) over `contextual_ucb`, `arm_ucb`, and `rl2_masked` beyond a pre-declared practical threshold ($\delta_{\text{info}} = 0.25$ total return units over $T - K = 20$ turns)?
+  2. **Net Adaptation Benefit:** End-to-end $T=24$ Total Return (Mean, **Median**, IQR, Win-Rate) and Early AUC.
+  3. **Feedback Conditioning:** `rl2` vs. `rl2_masked` (and vs. `prior_only`).
+  4. **Null vs. Inconclusive:** Distinguish statistically resolved null (95% CI wholly within $[-\delta, +\delta]$) from inconclusive (CI straddles threshold).
+
+---
+
+## 6. Scoped Execution Plan for 2026-12-17 / 12-20 Deadlines
+
+| Tier | Matrix | Compute & Priority |
+|---|---|---|
+| **Core (Mandatory)** | `R0, R1, R3` × Fixed Reactive Opponent × 5 seeds (`rl2`, `rl2_masked`, `prior_only`, `contextual_ucb`, `structural_model`, `arm_ucb`, `greedy`, `random`, `bayes_optimal`, `clairvoyant`) | 3 trained agents × 3 regimes × 5 seeds = **45 fits** (`2^18` pilot → up to `2^20` locked). Must complete & verify first. |
+| **Secondary (Multi-Agent Non-Stationarity)** | `R3` × Online Q-Learning Opponent (both zero-shot transfer of fixed-trained `rl2` AND matched training on online Q-learning opponent; Restored vs. Continuous with visible reset indicator + Counterpart Return) | 15 fits (matched) + zero-shot eval. Bounded/approximate diagnostics (no false exact full-horizon Oracle claim). |
+| **Optional (Only If Time Permits)** | `R2` (categorical observation noise), `Layer 2` (cross-fitted mixed exploiter), `H1` diversity (fixed budget vs. fixed exposure) | Drop before ever cutting independent training seeds below 5. |
+
+### Milestones
+- **Nov 27 – Dec 1:** Lock SPEC v3.0, implement R0/R1/R3 + exact rational DP Gate 0 + PPO-GAE + baselines, pass unit tests.
+- **Dec 2 – Dec 5:** Dev pilots (`2^18` transitions), verify learning curves & wall-clock throughput, lock hyperparameters.
+- **Dec 6 – Dec 11:** Sealed multi-seed Core + Secondary runs & independent verification.
+- **Dec 12 – Dec 15:** Figures, 5-page NeurIPS report draft, slides, 5-min video & 3 quiz questions.
+- **Dec 16:** Buffer & `<5 MB` code zip audit (**Dec 17 23:59** Video+Quiz; **Dec 20 23:59** Report+Code+Slides).

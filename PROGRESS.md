@@ -3,15 +3,18 @@
 ## Objective & Stage
 - **Goal:** Unbiased empirical inquiry into how meta-learning affects exploration and fast adaptation in multi-agent repeated games.
 - **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
-- **Stage:** **Exp 1 (Sealed 5-Seed Core, `R0/R1/R3`, 210/210 fits) COMPLETE & VERIFIED (`results/core_v3_sealed/`, repo `2.4 MB`)**. Ready for Exp 2A (Online Q-Learning / SARSA Opponents) and Exp 2B (Symmetric Competition & Cooperation Matchups).
+- **Stage:** **Exp 1 (`results/core_v3_sealed/`, 210/210 fits) & Exp 2A (`results/exp2a_online_opp/`, 90/90 units) COMPLETE & VERIFIED (24/24 unit tests pass).** Next: Exp 2B (Symmetric 4-Action Competition & Cooperation Matchups).
 
-## Verified Exp 1 Results (`results/core_v3_sealed/`, 5 sealed seeds `1001..1005`, `n_eval=512`, `10k` bootstrap)
-- **R0 (`Opt=20.20`) / R1 (`Opt=19.10`) / R3 (`Opt=17.575`):**
-  - `drqn_aux_yr` (unprivileged GRU-64 + self-supervised `y,r`): **`+20.200 ± 0.00` / `+19.100 ± 0.00` / `+17.520 ± 0.12`** (99.7% Bayes-Opt; R3 `L1_K4 commit=+17.000`, `L3_gap=0.000`, `probe=1.00`, `tv=1.00`, `rep(E/X)=0.07/0.97`).
-  - **Feedback Conditioning (`R3: drqn_aux_yr − masked`):** Total `+1.570 [+1.443, +1.678]` (`SUPPORTED_POS`, 100% win), Layer-1 commitment `+10.400 [+9.598, +11.725]` (`SUPPORTED_POS`), net cost-inclusive `+0.840 [+0.717, +0.955]` (`SUPPORTED_POS`).
-  - **Auxiliary Signal Ablation (`R3`):** `drqn_vanilla` (pure reward) reached `+12.930 ± 4.32` (med `+16.900`, `probe=1.00`) — breaking the `all-S` trap where on-policy `rl2_ppo` collapsed (`+4.800 ± 0.00`), but with high seed variance. `drqn_aux_r` (`+12.215 ± 3.71`) did not help; **`drqn_aux_y` (`+16.795 ± 1.47`, `L1_K4=+17.000`)** unlocked 100% exploration info; combining `y+r` (`+17.520 ± 0.12`) cut seed SD 36× (`SUPPORTED_POS` vs `vanilla`: `+4.590 [+1.298, +7.863]`).
-  - **Model-Based & Online Baselines (`R3`):** `structural_model` matched `drqn_aux_yr` (`+17.500 ± 0.07`, `RESOLVED_NULL`); `contextual_ucb` (`-20.73`), `arm_ucb` (`-7.30`), `greedy` (`-0.13`), `random` (`-23.22`) all lost decisively (`SUPPORTED_POS` across all 4 metrics).
+## Verified Exp 1 Results (`R0/R1/R3`, Fixed Reactive Opponent, 5 sealed seeds `1001..1005`)
+- **`drqn_aux_yr`:** `+20.200 ± 0.00` / `+19.100 ± 0.00` / `+17.520 ± 0.12` (99.7% Bayes-Opt; `L1_K4 commit=+17.000`, `L3_gap=0.000`). Beats masked (`+1.570`, `SUPPORTED_POS`), `drqn_vanilla` (`+4.590`, `SUPPORTED_POS`), `drqn_aux_r` (`+5.305`), `rl2_ppo` (`+4.800`), and online UCB/Greedy/Random; ties `structural_model` (`+17.500`, `RESOLVED_NULL`).
+- **Aux Signal Finding:** `aux_y` (opponent-action prediction) unlocks 100% exploration info (`+16.795`); `aux_r` alone does not (`+12.215`).
+
+## Verified Exp 2A Results (`R3` × Online `Q-learning` / Unseen `Expected SARSA`, 5 sealed seeds, Continuous vs. Restored)
+- **Zero-Shot Brittleness:** Fixed-trained `zs_drqn_aux_yr` collapsed under online opponents (`+4.407` on Q-learning, `-7.018` on unseen Expected SARSA; `zs_bayes_optimal = +4.443 / -9.644`), losing to smoothed `zs_structural_model` (`+8.737 / +1.739`, `SUPPORTED_NEG`).
+- **Matched Online Meta-Training (`mt_drqn_aux_yr`):** Rescued performance on `q_learning_indist` (`+9.837 ± 0.83`, `+5.430` over zero-shot, `SUPPORTED_POS`) by learning risk-aware fallback to `S` (`18.4%` vs `4.8%`, cutting `X_mismatch` 6.5×). Beat `masked` (`+1.497`, `SUPPORTED_POS`), `prior_only` (`+5.037`), `vanilla` (`+2.818`), and online UCB/Greedy/Random, with mutualistic opponent return (`50.32` vs `43.21`, `both_up=75.8%`).
+- **Restored vs. Continuous (`K=4`):** `mt_drqn_aux_yr` retained value after reset (`+9.837 → +9.345`, `-0.492` `INCONCLUSIVE`) whereas `mt_structural_model` dropped significantly (`+8.895 → +7.486`, `-1.409` `SUPPORTED_POS`), yielding `mt_drqn_aux_yr > mt_structural_model` on Restored (`+1.859`, `SUPPORTED_POS`; DiD `-0.917`, `SUPPORTED_NEG`).
+- **Honest OOD Noise Boundary (`expected_sarsa_unseen`, early honesty 59%):** Matched training prevented collapse (`-7.018 → +3.294`, beating UCB/Greedy and Restored `mt_structural_model`), **but ALL active probers lost to blind safe play `prior_only` (`+4.800`; `-1.506`, `SUPPORTED_NEG`)** when unseen early opponent noise exceeded the meta-trained risk threshold.
 
 ## Next Actionable Step
-1. Implement & run **Exp 2A** (`R3` × online Q-learning / unseen Expected SARSA opponents, Restored vs. Continuous) and **Exp 2B** (Symmetric 4-action Competition & Cooperation games: `Non-Meta vs. Non-Meta`, `Meta vs. Non-Meta`, `Meta vs. Meta`).
-2. Keep **Auxiliary Task Discovery** (`보조 목표 탐색`) as the top-priority extension after Exp 2A/2B.
+1. Implement & run **Exp 2B** (Symmetric 4-Action Competition & Cooperation games: `Non-Meta vs. Non-Meta`, `Meta vs. Non-Meta`, `Meta vs. Meta` on strictly held-out unseen rules).
+2. Keep **Auxiliary Task Discovery (`보조 목표 탐색`)** as the top-priority extension after Exp 2B.

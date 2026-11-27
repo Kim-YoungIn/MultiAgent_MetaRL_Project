@@ -136,17 +136,20 @@ class GreedyPolicyV3(BatchPolicyV3):
         self._rng = np.random.default_rng(seed)
         self._sum = np.zeros((batch_size, N_ACTIONS), dtype=np.float64)
         self._cnt = np.zeros((batch_size, N_ACTIONS), dtype=np.float64)
+        self._last_action = np.zeros(batch_size, dtype=np.int64)
 
     def act(self, obs: dict[str, np.ndarray], step_t: int) -> np.ndarray:
         if step_t > 0:
-            prev_a = obs["prev_self_action"]
+            prev_a = self._last_action
             prev_r = obs["prev_self_reward"]
             idx = np.arange(self._batch)
             self._sum[idx, prev_a] += prev_r
             self._cnt[idx, prev_a] += 1.0
         means = np.where(self._cnt > 0, self._sum / np.maximum(self._cnt, 1.0), 0.0)
         noise = self._rng.uniform(0.0, 1e-9, size=means.shape)
-        return np.argmax(means + noise, axis=-1).astype(np.int64)
+        acts = np.argmax(means + noise, axis=-1).astype(np.int64)
+        self._last_action = acts.copy()
+        return acts
 
 
 class ArmUCBPolicyV3(BatchPolicyV3):
@@ -163,10 +166,11 @@ class ArmUCBPolicyV3(BatchPolicyV3):
         self._rng = np.random.default_rng(seed)
         self._sum = np.zeros((batch_size, N_ACTIONS), dtype=np.float64)
         self._cnt = np.zeros((batch_size, N_ACTIONS), dtype=np.float64)
+        self._last_action = np.zeros(batch_size, dtype=np.int64)
 
     def act(self, obs: dict[str, np.ndarray], step_t: int) -> np.ndarray:
         if step_t > 0:
-            prev_a = obs["prev_self_action"]
+            prev_a = self._last_action
             prev_r = obs["prev_self_reward"]
             idx = np.arange(self._batch)
             self._sum[idx, prev_a] += prev_r
@@ -174,7 +178,9 @@ class ArmUCBPolicyV3(BatchPolicyV3):
         means = np.where(self._cnt > 0, self._sum / np.maximum(self._cnt, 1.0), 0.0)
         bonus = self.beta * np.sqrt(math.log(step_t + 2.0) / (self._cnt + 1.0))
         noise = self._rng.uniform(0.0, 1e-9, size=means.shape)
-        return np.argmax(means + bonus + noise, axis=-1).astype(np.int64)
+        acts = np.argmax(means + bonus + noise, axis=-1).astype(np.int64)
+        self._last_action = acts.copy()
+        return acts
 
 
 class ContextualUCBPolicyV3(BatchPolicyV3):
@@ -192,14 +198,15 @@ class ContextualUCBPolicyV3(BatchPolicyV3):
         self._sum = np.zeros((batch_size, N_ACTIONS, N_ACTIONS), dtype=np.float64)
         self._cnt = np.zeros((batch_size, N_ACTIONS, N_ACTIONS), dtype=np.float64)
         self._prev_q = np.full(batch_size, ACT_S, dtype=np.int64)
+        self._last_action = np.zeros(batch_size, dtype=np.int64)
 
     def act(self, obs: dict[str, np.ndarray], step_t: int) -> np.ndarray:
         idx = np.arange(self._batch)
         q_cur = obs["prev_self_action"]
         if step_t > 0:
             prev_r = obs["prev_self_reward"]
-            self._sum[idx, self._prev_q, q_cur] += prev_r
-            self._cnt[idx, self._prev_q, q_cur] += 1.0
+            self._sum[idx, self._prev_q, self._last_action] += prev_r
+            self._cnt[idx, self._prev_q, self._last_action] += 1.0
         self._prev_q = q_cur.copy()
 
         s_q = self._sum[idx, q_cur]
@@ -207,7 +214,9 @@ class ContextualUCBPolicyV3(BatchPolicyV3):
         means = np.where(c_q > 0, s_q / np.maximum(c_q, 1.0), 0.0)
         bonus = self.beta * np.sqrt(math.log(step_t + 2.0) / (c_q + 1.0))
         noise = self._rng.uniform(0.0, 1e-9, size=means.shape)
-        return np.argmax(means + bonus + noise, axis=-1).astype(np.int64)
+        acts = np.argmax(means + bonus + noise, axis=-1).astype(np.int64)
+        self._last_action = acts.copy()
+        return acts
 
 
 class StructuralModelPolicyV3(BatchPolicyV3):
@@ -246,11 +255,15 @@ class StructuralModelPolicyV3(BatchPolicyV3):
         *,
         n_episodes: int = 1024,
         seed: int = 0,
+        opponent_factory=None,
     ) -> "StructuralModelPolicyV3":
         """Collect unlabeled random offline trajectories and fit empirical reward + EM response clusters."""
         rng = np.random.default_rng(seed)
         env = VectorizedDelayedResponseEnv(regime=regime, batch_size=n_episodes, horizon=self.horizon, seed=seed + 31)
         obs = env.reset()  # Notice: we NEVER read env.theta!
+        opp = opponent_factory(n_episodes, seed + 53) if opponent_factory is not None else None
+        if opp is not None:
+            opp.reset(env.theta)
 
         q_hist = np.zeros((n_episodes, self.horizon), dtype=np.int64)
         a_hist = np.zeros((n_episodes, self.horizon), dtype=np.int64)
@@ -258,9 +271,13 @@ class StructuralModelPolicyV3(BatchPolicyV3):
         r_hist = np.zeros((n_episodes, self.horizon), dtype=np.float64)
 
         for t in range(self.horizon):
-            q_hist[:, t] = obs["prev_self_action"]
+            q_prev = obs["prev_self_action"].copy()
+            q_hist[:, t] = q_prev
             acts = rng.integers(0, N_ACTIONS, size=n_episodes, dtype=np.int64)
-            obs, rf, _ro, y = env.step(acts)
+            opp_a = opp.act(q_prev) if opp is not None else None
+            obs, rf, ro, y = env.step(acts, opp_actions=opp_a)
+            if opp is not None:
+                opp.update(q_prev=q_prev, y_act=y, r_opp=ro, q_next=acts)
             a_hist[:, t] = acts
             y_hist[:, t] = y
             r_hist[:, t] = rf
@@ -467,7 +484,8 @@ class BayesOptimalPolicyV3(BatchPolicyV3):
                 for th in range(N_TYPES):
                     if ((m >> th) & 1) and int(self._f_table[th, pq]) == py:
                         new_m |= 1 << th
-                self._masks[i] = new_m
+                if new_m != 0:
+                    self._masks[i] = new_m
         self._prev_q = q_cur.copy()
 
         rem = self.horizon - step_t

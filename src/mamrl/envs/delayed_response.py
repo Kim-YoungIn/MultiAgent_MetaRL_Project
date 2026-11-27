@@ -218,6 +218,29 @@ class VectorizedDelayedResponseEnv:
     def honest_opp_actions(self) -> np.ndarray:
         return self._f_table[self.theta, self.q]
 
+    def restore_public_state(
+        self,
+        obs: dict[str, np.ndarray],
+        mask: np.ndarray | None = None,
+    ) -> dict[str, np.ndarray]:
+        """Restore public state q -> S and set reset_flag=True while preserving last-turn (y, r).
+
+        Preserving prev_opp_action and prev_self_reward ensures turn-K feedback is not lost
+        while explicitly signaling via prev_self_action=S and reset_flag=True that the
+        physical state q (and any external opponent state) was reset before turn K+1.
+        """
+        new_obs = {k: v.copy() for k, v in obs.items()}
+        if mask is None:
+            self.q.fill(ACT_S)
+            new_obs["prev_self_action"].fill(ACT_S)
+            new_obs["reset_flag"].fill(True)
+        else:
+            m = np.asarray(mask, dtype=np.bool_)
+            self.q[m] = ACT_S
+            new_obs["prev_self_action"][m] = ACT_S
+            new_obs["reset_flag"][m] = True
+        return new_obs
+
     def step(
         self,
         focal_actions: np.ndarray,

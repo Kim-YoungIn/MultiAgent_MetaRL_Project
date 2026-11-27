@@ -10,6 +10,7 @@ Supports orthogonal ablations:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any, Callable
 import numpy as np
 import torch
 import torch.nn as nn
@@ -76,6 +77,8 @@ class DRQNConfig:
     log_interval: int = 10
     seed: int = 0
     device: str = "cpu"
+    reset_prob: float = 0.0   # Optional mid-episode restore probability at reset_step (for Exp 2A)
+    reset_step: int = 4
 
 
 def compute_aux_losses(
@@ -116,7 +119,11 @@ def compute_aux_losses(
     return y_loss, r_loss
 
 
-def train_drqn_rl2(cfg: DRQNConfig) -> tuple[RecurrentQNet, list[dict[str, float]], int]:
+def train_drqn_rl2(
+    cfg: DRQNConfig,
+    *,
+    opponent_factory: Callable[[int, int], Any] | None = None,
+) -> tuple[RecurrentQNet, list[dict[str, float]], int]:
     """Train RecurrentQNet via off-policy Double-DQN + optional self-supervised predictive aux."""
     if cfg.variant not in ("rl2", "rl2_masked", "prior_only"):
         raise ValueError(f"Unsupported variant: {cfg.variant}")
@@ -135,6 +142,7 @@ def train_drqn_rl2(cfg: DRQNConfig) -> tuple[RecurrentQNet, list[dict[str, float
     b = cfg.batch_episodes
     t_len = cfg.horizon
     env = VectorizedDelayedResponseEnv(cfg.regime, batch_size=b, horizon=t_len, seed=cfg.seed + 17)
+    opp = opponent_factory(b, cfg.seed + 53) if opponent_factory is not None else None
     rng = np.random.default_rng(cfg.seed + 31)
 
     cap = cfg.replay_capacity
@@ -156,6 +164,8 @@ def train_drqn_rl2(cfg: DRQNConfig) -> tuple[RecurrentQNet, list[dict[str, float
             eps = max(cfg.eps_end, cfg.eps_start * (1.0 - frac))
 
         obs = env.reset()
+        if opp is not None:
+            opp.reset(env.theta)
         h = torch.zeros((1, b, cfg.hidden_dim), dtype=torch.float32, device=device)
         ep_o = np.zeros((b, t_len, OBS_DIM), dtype=np.float32)
         ep_a = np.zeros((b, t_len), dtype=np.int64)
@@ -171,7 +181,17 @@ def train_drqn_rl2(cfg: DRQNConfig) -> tuple[RecurrentQNet, list[dict[str, float
                 greedy_a = qv.argmax(dim=-1).cpu().numpy()
                 rand_a = rng.integers(0, N_ACTIONS, size=b)
                 a = np.where(rng.random(b) < eps, rand_a, greedy_a).astype(np.int64)
-                obs, rf, _ro, y = env.step(a)
+                q_prev = env.q.copy()
+                opp_a = opp.act(q_prev) if opp is not None else None
+                obs, rf, ro, y = env.step(a, opp_actions=opp_a)
+                if opp is not None:
+                    opp.update(q_prev=q_prev, y_act=y, r_opp=ro, q_next=a)
+                if cfg.reset_prob > 0.0 and (t + 1) == cfg.reset_step and (t + 1) < t_len:
+                    reset_mask = rng.random(b) < cfg.reset_prob
+                    if np.any(reset_mask):
+                        obs = env.restore_public_state(obs, mask=reset_mask)
+                        if opp is not None:
+                            opp.restore(snap=None, mask=reset_mask)
                 ep_a[:, t] = a
                 ep_y[:, t] = y
                 ep_r[:, t] = rf.astype(np.float32)

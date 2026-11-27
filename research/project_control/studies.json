@@ -3,15 +3,32 @@
   "studies": [
     {
       "id": "d031-continuation",
-      "stage": "partial",
-      "scope": "D-031 full-budget continuation; primary comparison complete, extensions incomplete",
+      "stage": "completed",
+      "scope": "Full historical D-031 budget, diversity and cross-action transfer",
       "protocol": "04_design/Adaptation_Experiment.md",
       "report": "research/d031_completion/README.md",
-      "evidence": "research/rule_similarity/evidence/d031_continuation_summary.json",
+      "evidence": "research/d031_completion/evidence/completion.json",
       "raw": "runs/d031_completion_v2/study",
       "reproduce": "research/d031_completion/README.md",
-      "verification": "Primary result reaggregated from trial curves and receipt hashes; extension completion is counted separately.",
-      "status_command": ".venv/bin/python -m research.d031_completion.status runs/d031_completion_v2/study"
+      "verification": "375 fits, 1,275 evaluation receipts, and 563,200 fresh-rule M/P trial curves verified. All 11 groups and five original condition contrasts agree with the sealed report.",
+      "status_command": ".venv/bin/python -m research.d031_completion.status runs/d031_completion_v2/study",
+      "bindings": [
+        {
+          "local": "runs/d031_completion_v2/study/study.json",
+          "evidence": "research/d031_completion/evidence/completion.json",
+          "field": "study_sha256"
+        },
+        {
+          "local": "runs/d031_completion_v2/study/panels/panel.json",
+          "evidence": "research/d031_completion/evidence/completion.json",
+          "field": "panel_sha256"
+        },
+        {
+          "local": "runs/d031_completion_v2/study/report.json",
+          "evidence": "research/d031_completion/evidence/completion.json",
+          "field": "report_sha256"
+        }
+      ]
     },
     {
       "id": "fast-exploration-v1",

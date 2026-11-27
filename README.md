@@ -13,7 +13,7 @@ The latest study evaluates 36 previously trained blocks on 2,304 fresh structure
 | Teacher, Student, opponent, implementation and training commands | [Fast Exploration architecture](research/fast_exploration/architecture/README.md) |
 | Earlier Fast Exploration results | [36-block v2](research/fast_exploration/results/v2/README.md) · [24-block v1](research/fast_exploration/results/README.md) · [v1 by seed](research/fast_exploration/results/SEED_RESULTS.md) |
 | Structured game rules and simulator | [Game guide](STRUCTURED_GAMES.md) · [Environment](05_toy_models/mamrl/structured_games.py) |
-| Historical recurrent exploration study | [D-031 results, verification and resume instructions](research/d031_completion/README.md) |
+| Historical recurrent exploration study, all 375 fits and 175 home evaluation cells completed | [D-031 results and verification](research/d031_completion/README.md) · [Diversity contrasts](research/d031_completion/evidence/diversity.png) |
 
 ## Managing and reproducing studies
 

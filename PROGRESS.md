@@ -2,20 +2,21 @@
 
 ## 현재 단계
 
-공동 투자가 상태를 바꾸는 게임에서 메타학습된 탐색 정책의 전이 실험을 완료했다. 이전 D-031도 봉인된 예산 전체의 학습·평가·독립 검증을 마쳤다. 새 실행 대기열은 비어 있다.
+메타학습이 새 게임에서 어떤 경험을 모으고 어떻게 적응하는지 연구한다. 등록된 15개 연구를 대상으로 사후 종합 분석을 완료했다. 10개 항목은 원자료·게임별 계산값을 재집계했고, 5개는 공개된 비교 결과를 대조했다. [재분석 보고서와 재현 명령](research/retrospective/REPORT.md)
 
-## 검증된 결과
+## 근거가 있는 결과
 
-- **규칙 전이 실험** — 기존 v2 훈련 블록 36개, 새 기본 게임 2,304개, 게임당 6개 변형 × 2개 리셋. K=8 이후 평가에서 성공 확률을 .6 낮췄을 때 전체−차단 피드백 이득의 변화는 턴당 −.000118 [−.001682, +.001424]였다. [프로토콜](research/dynamics_transfer/PROTOCOL.md) · [보고서와 재현 명령](research/dynamics_transfer/REPORT.md)
-- 원래 시간 조건에서 96턴 Teacher−Student 누적 이득은 같은 조작으로 −.399 [−.625, −.166] 변했다. 호혜 게임의 감소가 가장 컸다. [계열별 수치](research/dynamics_transfer/evidence/summary.csv) · [시드별 그림](research/dynamics_transfer/evidence/primary_by_seed.png)
-- 864개 전체 궤적을 스칼라 환경에서 재현하고 주 효과와 구간을 독립 재계산했다. 새 궤적·행동·체크섬은 로컬 `runs/dynamics_transfer_v1/`에 있다. [검증 영수증](research/dynamics_transfer/evidence/verification.json)
-- **D-031** — 375/375회 학습, 175/175개 자체 행동 수 평가 셀, 50/50개 교차 평가 셀. 1,275개 영수증과 M/P 시험 곡선 563,200개를 확인했다. 25쌍 주 비교 M−P는 −.01274 [−.01608, −.00954]였다. [완료 보고서](research/d031_completion/README.md) · [원자료 독립 재집계](research/d031_completion/evidence/completion.json)
-- 저장소 회귀 검사 248개 중 244개 통과, CUDA 의존 검사 4개를 건너뛰었다. 기존 24블록과 36블록 연구는 [Fast Exploration 색인](research/fast_exploration/README.md)에 있다.
+- **분포와 기준 정책** — 같은 36개 학습 블록을 평가한 서로 다른 96턴 패널에서 Teacher−Student 평균은 +0.446, +0.428, 중앙값은 −0.144, −0.142였다. Teacher가 UCB를 앞선 게임은 두 패널 모두 약 43.5%였다. [게임별 분포](research/retrospective/distribution.md)
+- **두 플레이어와 게임 구성** — 상대방 보상도 평균적으로 늘었지만, 양쪽 모두 손해를 본 게임이 양쪽 모두 이긴 게임보다 많았다. 호혜 게임을 제외한 균등 계열 혼합에서는 Teacher−Student 평균이 두 패널 모두 음수였다. [대응 수치](research/retrospective/evidence/joint_returns.csv) · [재가중 결과](research/retrospective/evidence/family_weights.csv)
+- **정보 관측과 행동 선택** — 6행동·깊이 5의 두 턴 정확 계산에서 96쌍 중 62쌍은 첫 보상을 관측하면 이득이었고, 그 이득을 모두 얻으려면 최적 첫 행동까지 바꿔야 한 경우는 6쌍이었다. [전체 설정](research/retrospective/evidence/oracle.csv)
+- **훈련과 직접 플레이** — 같은 경험을 받은 메타 초기화와 일반 사전학습의 행동은 8턴 후 14.32%의 게임에서 달랐다. 별도로 직접 플레이하면 메타 쪽 24턴 누적 보상이 0.179 낮았다. [블록별 검증](research/retrospective/earlier.md)
+- **D-031** — 전체 375회 학습, 자체 평가 175셀·교차 평가 50셀을 완료했다. 재분석에서 탐색 보상 목표 P가 무작위보다 전체 AUC는 +0.01585 높았고 경쟁 규칙에서는 −0.01901 낮았다. [정규 예산 검증](research/d031_completion/README.md) · [기준 정책·규칙별 결과](research/retrospective/d031.md)
+- **규칙 전이** — 공동 투자 성공 확률을 0.6 낮추면 96턴 Teacher−Student 이득이 −0.399 변했다. 피드백 사용의 후속 이득 변화는 −0.000118 [−0.001682, +0.001424]였다. [프로토콜·결과](research/dynamics_transfer/REPORT.md)
 
 ## 재개 기준
 
-[연구 목록](research/project_control/studies.json)에 15개 연구의 상태·프로토콜·근거·재현 경로가 있다. `python3 -m research.project_control --check`로 경로와 지정된 로컬 해시를 검사한다. 상세 원자료와 체크포인트는 로컬 `runs/`에 유지한다.
+프로토콜, 원자료 위치와 재현 경로는 [연구 목록](research/project_control/studies.json)에 있다. 상세 궤적과 체크포인트는 로컬 `runs/`에 보존했다. `python3 -m research.project_control --check`로 15개 항목과 등록된 경로·해시를 확인할 수 있다. 실행 대기열은 비어 있다.
 
 ## 다음 판단
 
-같은 전이 거리에서도 공동 투자 기회와 보상 회수율은 계열과 상대 행동에 따라 달랐다. 다음 과학적 판단은 **협력 자체의 수익성을 맞춘 상태에서, 새 정보를 얻는 행동의 가치만 달라지는 비교를 식별할 수 있는가**이다. 이번 연구는 성공 확률을 낮추는 한 방향만 시험했다. [행동을 고정한 진단](research/dynamics_transfer/evidence/exposure.csv)
+두 턴 oracle에서 ‘유용한 정보를 볼 수 있음’과 ‘그 정보를 위해 행동을 바꿀 필요가 있음’의 차이가 컸다. 다음 연구 판단은 학습된 탐색자의 정보 선택을 식별하는 데 기존 피드백 차단·상태 복원 대조가 어디까지 적용되는지 점검하는 것이다. 장기 배치에서 관측된 큰 이득에는 상대의 반응과 상태 변화가 함께 들어 있다.

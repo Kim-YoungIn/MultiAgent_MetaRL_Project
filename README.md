@@ -4,6 +4,8 @@ Can an agent select experiences that help it adapt to an unfamiliar game and a l
 
 ## Current research
 
+Two 96-turn test panels gave a similar distribution of outcomes. Eight turns of exploration by a trained Teacher raised mean return relative to a greedy Student, while the median game's return fell on both panels. The retrospective also examines both players' payoffs, competition against UCB, and when observing a reward actually requires a different opening move. [Cross-study analysis, figures and reproduction](research/retrospective/REPORT.md)
+
 The latest study evaluates 36 previously trained blocks on 2,304 fresh structured games. Lowering the probability that joint investment changes the state did little to alter the measured advantage of feedback-conditioned exploration over a matched masked Teacher. It reduced the 96-turn total-return Teacher's advantage over Student-only, particularly in reciprocity games. [Results, family comparisons and reproduction](research/dynamics_transfer/REPORT.md) · [Protocol](research/dynamics_transfer/PROTOCOL.md)
 
 | To find | Start here |

@@ -1,22 +1,19 @@
-# 연구 현황 · 2026-11-27
+# Progress Snapshot — 2026-11-27
 
-## 현재 단계
+## Objective & Stage
+- **Goal:** Study how meta-learning affects exploration and fast adaptation in multi-agent games (Path A).
+- **Deadlines:** 2026-12-17 (5-min video + 3 quiz questions) · 2026-12-20 (5-page NeurIPS report + <5 MB code zip + slides).
+- **Stage:** Clean v2 refactor verified on branch `refactor/v2-clean` (1.7 MB tracked footprint; 6/6 tests pass). Ready for GPT review of `docs/SPEC.md` and Exp 1 calibration.
 
-메타학습이 새 게임에서 어떤 경험을 모으고 어떻게 적응하는지 연구한다. 등록된 15개 연구를 대상으로 사후 종합 분석을 완료했다. 10개 항목은 원자료·게임별 계산값을 재집계했고, 5개는 공개된 비교 결과를 대조했다. [재분석 보고서와 재현 명령](research/retrospective/REPORT.md)
+## Completed Work (Verified)
+- Tagged full legacy repo (`290dabf`, 15 verified studies) at `archive/v0.9-legacy-studies`; distilled failures into `docs/PRIOR_FINDINGS.md` and preserved key figures/tables in `results/legacy_summary/` (340 KB).
+- Rebuilt single-entry rules (`AGENTS.md`), Path-A spec (`docs/SPEC.md`), collaboration guide (`docs/COLLABORATION.md`), and GPT context packer (`scripts/pack_context.py` -> `handoff/context_pack.md`, ~20 KB).
+- Implemented clean core package (`src/mamrl/`) and verified `unittest` (6/6 OK in 2.7 s) + pilot run (`configs/pilot_active_explore.json` -> `runs/pilot_active_low.json`): Gate-0 Oracle confirmed `VoI>0 = 100%`, `must_change_opening = 100%` (`mean_VoI = 0.5030`); `greedy` trapped at `+7.99` while `meta_full` reached `+26.24` and `ucb` `+28.31`.
 
-## 근거가 있는 결과
+## Active Decisions & Open Issues
+- **Pilot diagnostic finding:** With `exploit_miss = -0.70` and `probe_cost = 0.15`, gambling on `EXPLOIT` at turn 0 has higher prior mean (`+0.10`) than `PROBE` (`-0.15`), letting UCB tie/edge Oracle (`+28.31` vs `+27.96`). Calibrating risk/probe structure (e.g., deeper mismatch penalty or multi-step/opponent-contingent probe) before locking Exp 1 is the immediate design decision.
+- Legacy code stays ONLY in git tag `archive/v0.9-legacy-studies`; local `runs/` remains untouched (gitignored).
 
-- **분포와 기준 정책** — 같은 36개 학습 블록을 평가한 서로 다른 96턴 패널에서 Teacher−Student 평균은 +0.446, +0.428, 중앙값은 −0.144, −0.142였다. Teacher가 UCB를 앞선 게임은 두 패널 모두 약 43.5%였다. [게임별 분포](research/retrospective/distribution.md)
-- **두 플레이어와 게임 구성** — 상대방 보상도 평균적으로 늘었지만, 양쪽 모두 손해를 본 게임이 양쪽 모두 이긴 게임보다 많았다. 호혜 게임을 제외한 균등 계열 혼합에서는 Teacher−Student 평균이 두 패널 모두 음수였다. [대응 수치](research/retrospective/evidence/joint_returns.csv) · [재가중 결과](research/retrospective/evidence/family_weights.csv)
-- **정보 관측과 행동 선택** — 6행동·깊이 5의 두 턴 정확 계산에서 96쌍 중 62쌍은 첫 보상을 관측하면 이득이었고, 그 이득을 모두 얻으려면 최적 첫 행동까지 바꿔야 한 경우는 6쌍이었다. [전체 설정](research/retrospective/evidence/oracle.csv)
-- **훈련과 직접 플레이** — 같은 경험을 받은 메타 초기화와 일반 사전학습의 행동은 8턴 후 14.32%의 게임에서 달랐다. 별도로 직접 플레이하면 메타 쪽 24턴 누적 보상이 0.179 낮았다. [블록별 검증](research/retrospective/earlier.md)
-- **D-031** — 전체 375회 학습, 자체 평가 175셀·교차 평가 50셀을 완료했다. 재분석에서 탐색 보상 목표 P가 무작위보다 전체 AUC는 +0.01585 높았고 경쟁 규칙에서는 −0.01901 낮았다. [정규 예산 검증](research/d031_completion/README.md) · [기준 정책·규칙별 결과](research/retrospective/d031.md)
-- **규칙 전이** — 공동 투자 성공 확률을 0.6 낮추면 96턴 Teacher−Student 이득이 −0.399 변했다. 피드백 사용의 후속 이득 변화는 −0.000118 [−0.001682, +0.001424]였다. [프로토콜·결과](research/dynamics_transfer/REPORT.md)
-
-## 재개 기준
-
-프로토콜, 원자료 위치와 재현 경로는 [연구 목록](research/project_control/studies.json)에 있다. 상세 궤적과 체크포인트는 로컬 `runs/`에 보존했다. `python3 -m research.project_control --check`로 15개 항목과 등록된 경로·해시를 확인할 수 있다. 실행 대기열은 비어 있다.
-
-## 다음 판단
-
-두 턴 oracle에서 ‘유용한 정보를 볼 수 있음’과 ‘그 정보를 위해 행동을 바꿀 필요가 있음’의 차이가 컸다. 다음 연구 판단은 학습된 탐색자의 정보 선택을 식별하는 데 기존 피드백 차단·상태 복원 대조가 어디까지 적용되는지 점검하는 것이다. 장기 배치에서 관측된 큰 이득에는 상대의 반응과 상태 변화가 함께 들어 있다.
+## Next Actionable Step
+1. Share `handoff/context_pack.md` with GPT to critique Exp 1 & Exp 2 calibration (`docs/SPEC.md`), especially probe vs. risky-gamble separation and H1 diversity axes.
+2. Lock Exp 1 (`Passive` vs. `Active`) and run multi-seed comparisons via `mamrl.runner`.

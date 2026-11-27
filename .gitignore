@@ -1,5 +1,6 @@
 .venv/
 __pycache__/
+*.pyc
 .pytest_cache/
 .ipynb_checkpoints/
 .env
@@ -7,6 +8,8 @@ __pycache__/
 runs/
 checkpoints/
 *.ckpt
-/runs/
-.zip
-
+*.zip
+*.egg-info/
+build/
+dist/
+handoff/context_pack.md

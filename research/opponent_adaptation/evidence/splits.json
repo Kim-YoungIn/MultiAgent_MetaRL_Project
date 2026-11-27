@@ -1,9 +1,0 @@
-{
-  "training": 3072,
-  "test": 3072,
-  "overlap": 0,
-  "previous_structured": 3776,
-  "active_probe": 22528,
-  "new_overlap_with_old": 0,
-  "active_probe_overlap_with_prior": 0
-}

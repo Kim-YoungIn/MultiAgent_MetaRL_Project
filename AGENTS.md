@@ -1,32 +1,38 @@
-# Multi-Agent Meta-Learning Research — Agent Guidance
+# Multi-Agent Meta-RL Research — Agent Rules (Single Entry)
 
-This repository investigates **how meta-learning affects agents' ability to adapt in multi-agent environments**. The objective is to produce a theoretically justified, empirically informative, and reproducible study—not to preserve a particular architecture or improve a preselected score.
+All coding and review agents (Antigravity, Codex, GPT, Claude) MUST follow this file.
 
-## Research orientation
+## 1. Research Goal & Deliverables
 
-- Start from the scientific question, not the existing implementation. Define what constitutes a task, an opponent, adaptation, generalization, and a valid causal or comparative claim before committing to methods.
-- The historical questions are **H1**, how training-game and opponent diversity affects adaptation to unseen tasks, and **H2**, whether reusable structure across games explains transfer. H1 was prioritized, with H2 contingent on the evidence. Both formulations can be criticized or refined; neither prescribes an algorithm.
-- The original interest in learned exploration is important context, **not a requirement for a separate exploration policy**. Do not silently replace adaptation research with opponent shaping or another neighboring topic.
-- Treat `01_originals/` as the original proposal and course requirements; `00_management/`, `04_design/`, `05_toy_models/`, `experiment/`, and past `runs/` as historical decisions, implementations, and evidence. Their labels such as FIXED describe previous experiment contracts, not permanent restrictions on new research. Preserve the reproducibility of those historical experiments.
+- **Core Question:** *멀티에이전트 반복 게임에서 메타 러닝이 탐색(exploration)을 개선하여 새로운 게임·학습 상대에 대한 빠른 적응(fast adaptation)에 어떤 영향을 미치는가?*
+- **Active Strategy (Path A):**
+  1. **Part 1 (Diagnosed):** Prior studies (`archive/v0.9-legacy-studies`, summarized in `docs/PRIOR_FINDINGS.md`) showed that meta-learned exploration raised *mean* return while lowering the *median* and losing to UCB—because most tasks did not strictly require changing the opening action to gain information, and long-horizon gains were confounded with opponent shaping.
+  2. **Part 2 (Active Focus):** Verify when meta-learned exploration genuinely accelerates adaptation using a controlled multi-agent benchmark (`docs/SPEC.md`) where **active costly probing is provably required** (verified by exact Oracle), separating information gain from opponent shaping and task diversity from per-task exposure.
+- **Hard Course Deadlines (`docs/course/Evaluation_Plan.pdf`):**
+  - **2026-12-17 23:59:** 5-minute presentation video + 3 quiz questions (75% of project grade).
+  - **2026-12-20 23:59:** 5-page NeurIPS report + code zip (**≤ 5 MB**) + slides (20% of project grade).
 
-## Independent, ambitious design
+## 2. Single Source of Truth & Anti-Sprawl Rules
 
-- Explore **fundamentally different formulations and architectures**, including approaches beyond the repository's current examples. Teacher–Student decomposition, recurrent meta-agents, learned optimizers, inference-based adaptation, PPO, Q-learning, Memory-One reward tensors, fixed within-task rules, and D-031 are all **optional choices**.
-- Use current literature, theory, and appropriate computational tools to compare candidates in terms of expressive power, adaptation mechanism, information use, learning signal, strategic interaction, identification, compute cost, and the strength of conclusions they permit.
-- Be willing to replace the environment, learning algorithm, experiment protocol, or substantial parts of the codebase if a stronger research design warrants it. Neither incremental patching nor wholesale rewriting is a goal in itself.
-- Scale experiments when justified. Existing values for model size, action count, number of games or opponents, training updates, seeds, horizons, and hardware are **not research limits**. Extend the runner, configuration, batching, parallelism, checkpointing, or analysis pipeline where needed; do not claim unsupported functionality already exists.
+Only three living documents govern active work:
+1. `AGENTS.md` — These rules (stable).
+2. `docs/SPEC.md` — Active experiment contract (environment, agents, controls, metrics).
+3. `PROGRESS.md` — Current status, verified results, blockers, next 1 action (≤ 30 lines; rewrite, never append a diary).
 
-## Scientific and engineering integrity
+**Strict structural rules:**
+- **Never create new top-level directories or per-study code folders** (no `research/study_x/`). Extend `src/mamrl/` cleanly and add declarative JSON configs under `configs/`.
+- **Legacy code lives ONLY in git tag `archive/v0.9-legacy-studies`.** Do not restore legacy directories into the working tree; consult `docs/PRIOR_FINDINGS.md` first.
+- Keep git-tracked files compact so the submission zip stays well under **5 MB**. Heavy outputs and checkpoints go strictly under `runs/` (gitignored).
 
-- Distinguish meta-learning effects from stronger priors, extra exposure, additional optimization, opponent dynamics, and evaluation leakage. Compare reasonable alternatives, not only weak baselines. Measure early performance, adaptation as experience accumulates, total costs, and failure conditions.
-- Separate exploration of hypotheses and design from **precommitted final evaluations**. Never silently overwrite completed experiments or reinterpret opened test sets as untouched. Record substantial redesigns under a new version or protocol.
-- Implement, run, and independently validate work wherever feasible. Tests passing, a model training, and a research hypothesis being supported are different claims. Preserve null and negative results; report failures and incomplete runs explicitly.
-- Use the available capable models, tools, and subagents deliberately for independent scientific critique, focused implementation, and validation. Keep one owner for conflicting edits; assess evidence rather than agent agreement.
+## 3. Scientific & Engineering Integrity
 
-## Session continuity and documentation
+- **Gate 0 — Oracle Verification First:** Never run meta-training on a task distribution without first verifying via `mamrl.eval.oracle` that (a) observation has positive Value of Information (VoI > 0) and (b) optimal play strictly requires changing the opening action away from the greedy/myopic choice.
+- **No Mean-Only Reporting:** Always report **Mean, Median, Win-Rate vs baselines, Early Adaptation AUC, Total Return (including exploration cost), and Counterpart Return** (to detect opponent shaping vs pure information gain).
+- **Mandatory Controls:** Compare Meta-Explorer against **Greedy/No-Explore, Random, UCB, Masked-Feedback Explorer** (same training without conditioning on feedback), and **Oracle** (upper bound). Separate **Opponent-Restored (pure information)** from **Continuous Deployment** evaluation.
+- **No Leakage or Silent Overwrites:** Separate development and final test seeds; record config + git commit + seed in every run output; preserve negative/null findings honestly.
 
-- **Read `PROGRESS.md` at session start** alongside only the sources relevant to the task. Treat it as a compact navigation aid, not an authority overriding code, data, user instructions, or source documents.
-- **Create `PROGRESS.md` if missing; update it after meaningful milestones and before ending a work session.** Replace obsolete status rather than appending a diary. Keep it concise (normally 15–30 lines): current objective and stage, completed work with evidence, active decisions and assumptions, blockers or unresolved issues, and the next actionable step. Include paths/commit IDs as useful; never mark unrun tests or experiments complete.
-- Keep `README.md` focused on research scope, actual capabilities, reproduction, and extensibility. Update other management documents only when their current purpose requires it; avoid redundant logs, excessive instructions, and documentation growth that crowds out research.
+## 4. Multi-Agent Collaboration (GPT / Codex / Antigravity)
 
-**Success criterion:** a defensible, falsifiable, and reproducible account of when and why meta-learning improves—or fails to improve—adaptation in multi-agent settings.
+- Before consulting an external agent (e.g., ChatGPT web), run `.venv/bin/python scripts/pack_context.py` to generate `handoff/context_pack.md`.
+- Store external critiques/proposals in `handoff/reviews/YYYYMMDD_<topic>.md`. External suggestions are **proposals until adopted into `docs/SPEC.md`**.
+- One writer at a time per file; validate every consequential code change with `pytest`/`unittest` before updating `PROGRESS.md`.

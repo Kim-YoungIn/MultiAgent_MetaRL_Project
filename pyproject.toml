@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mamrl"
+version = "2.0.0"
+description = "Multi-Agent Meta-RL: Meta-Learned Exploration for Fast Adaptation"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "torch",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

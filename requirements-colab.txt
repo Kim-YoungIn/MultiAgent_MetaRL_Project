@@ -1,3 +1,0 @@
-# Keep the CUDA-enabled PyTorch supplied by the Colab runtime.
-# Do not install requirements-training.txt here: it pins a CPU-only wheel.
-numpy>=1.26,<3

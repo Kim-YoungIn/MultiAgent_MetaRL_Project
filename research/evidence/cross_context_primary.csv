@@ -1,3 +1,0 @@
-hypothesis,left,right,target_same,blocks,estimate,lower_97_5,upper_97_5,resamples,seed
-adaptation_vs_independent,g128_p75_mix,independent,0.75,32,0.06798206942816892,0.04641536234788482,0.08873972027964971,10000,79113
-diversity_on_balanced,g128_p50_mix,g128_p100_mix,0.5,32,0.0535190653840145,0.029621181772718497,0.07741421857894376,10000,79113

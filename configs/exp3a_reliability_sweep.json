@@ -1,0 +1,30 @@
+{
+  "study_id": "exp3a_reliability_sweep",
+  "output_dir": "runs/exp3a_reliability_sweep",
+  "exp1_runs_dir": "runs/core_v3_sealed",
+  "exp2a_runs_dir": "runs/exp2a_online_opp",
+  "exp2b_runs_dir": "runs/exp2b_symmetric_ma",
+  "seeds": [1001, 1002, 1003, 1004, 1005],
+  "d_values": [0.0, 0.3, 0.6],
+  "coop_slip_payoff": -0.2,
+  "horizon": 24,
+  "hidden_dim": 64,
+  "n_eval_episodes": 512,
+  "eval_seed_base": 98000,
+  "n_bootstrap": 10000,
+  "delta_return": 0.30,
+  "r3_methods": [
+    "shifted_bayes_ref",
+    "exp1_drqn_aux_yr",
+    "exp1_drqn_vanilla",
+    "exp1_drqn_aux_yr_masked",
+    "exp1_drqn_prior_only",
+    "exp1_structural_model",
+    "exp2a_mt_drqn_aux_yr",
+    "exp2a_mt_drqn_vanilla",
+    "exp2a_mt_structural_model",
+    "greedy",
+    "arm_ucb",
+    "contextual_ucb"
+  ]
+}

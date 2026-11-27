@@ -433,16 +433,30 @@ class StructuralModelPolicyV3(BatchPolicyV3):
         self._prev_q = q_cur.copy()
 
         rem = self.horizon - step_t
-        # Cache decisions by quantized (q, belief) for fast batch evaluation
-        actions = np.zeros(self._batch, dtype=np.int64)
-        cache: dict[tuple[int, tuple[float, ...]], int] = {}
-        for i in range(self._batch):
-            qi = int(q_cur[i])
-            b_key = (qi, tuple(round(float(x), 3) for x in self._belief[i]))
-            if b_key not in cache:
-                cache[b_key] = self._learned_voI_lookahead(qi, self._belief[i], rem)
-            actions[i] = cache[b_key]
-        return actions
+        # Exact vectorized 2-step belief lookahead (exploiting degree-1 homogeneity of max expected return)
+        exp_r_all = np.einsum("mqy,qay->mqa", self.p_y_given_mq, self.r_hat)  # (M, Q, A)
+        exp_r_q = np.transpose(exp_r_all[:, q_cur, :], (1, 0, 2))  # (B, M, A)
+        imm1 = np.einsum("bm,bma->ba", self._belief, exp_r_q)  # (B, A)
+        if rem <= 1:
+            return np.argmax(imm1, axis=-1).astype(np.int64)
+
+        p_obs_q = np.transpose(self.p_y_given_mq[:, q_cur, :], (1, 2, 0))  # (B, Y, M)
+        w1 = self._belief[:, None, :] * p_obs_q  # (B, Y, M)
+        imm2 = np.einsum("bym,maq->byaq", w1, exp_r_all)  # (B, Y, A1, A2)
+        if rem <= 2:
+            v2 = imm2
+        else:
+            # w2[b, y, a1, y2, m] = w1[b, y, m] * P_m(y2 | a1)
+            w2 = w1[:, :, None, None, :] * np.transpose(self.p_y_given_mq, (1, 2, 0))[None, None, :, :, :]
+            # commit_ret[target_m, a2, true_m]
+            cret = self._cluster_policy_ret[:, rem - 2, :, :]  # (M_t, A2, M)
+            # val_commit[b, y, a1, y2, a2, target_m]
+            val_c = np.einsum("byazm,tqm->byazqt", w2, cret)
+            c2 = np.sum(np.max(val_c, axis=-1), axis=3)  # (B, Y, A1, A2)
+            v2 = imm2 + c2
+
+        cont1 = np.sum(np.max(v2, axis=-1), axis=1)  # (B, A1)
+        return np.argmax(imm1 + cont1, axis=-1).astype(np.int64)
 
 
 class BayesOptimalPolicyV3(BatchPolicyV3):
